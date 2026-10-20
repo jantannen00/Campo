@@ -1,0 +1,686 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Fundo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: barra de módulos en verde campo + espacio de trabajo con tablas operables y ficha lateral */
+:root{
+  --bg:#F2F5F1; --surface:#FFFFFF; --sunk:#E9EFE8; --fg:#18281D; --muted:#5A6B5F; --line:#DCE4DA; --line-strong:#C3D0C2;
+  --brand:#16351F; --brand-fg:#E6F0E8; --brand-muted:#93B59D; --brand-soft:#24603A;
+  --accent:#2E7346; --accent-fg:#FFFFFF; --accent-soft:#E1EEE3;
+  --ok:#2C6B42; --ok-bg:#E1EEE3; --warn:#8F5A0E; --warn-bg:#FAEFD7; --bad:#A3372A; --bad-bg:#F8E3DF; --neu:#56645A; --neu-bg:#E8ECE7;
+  --shade:rgba(16,28,20,.38);
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0E1611; --surface:#15201A; --sunk:#1B2820; --fg:#E2EBE4; --muted:#98AC9D; --line:#29392E; --line-strong:#38503F;
+  --brand:#0A160E; --brand-fg:#D8E8DC; --brand-muted:#7FA28A; --brand-soft:#1F4A2D;
+  --accent:#62B47F; --accent-fg:#0A160E; --accent-soft:#1D3A26;
+  --ok:#7DC797; --ok-bg:#1D3A26; --warn:#E5B567; --warn-bg:#3A2D14; --bad:#EF8F80; --bad-bg:#3E1F1A; --neu:#A9B8AD; --neu-bg:#222F27;
+  --shade:rgba(0,0,0,.55); color-scheme:dark }}
+:root[data-theme="dark"]{
+  --bg:#0E1611; --surface:#15201A; --sunk:#1B2820; --fg:#E2EBE4; --muted:#98AC9D; --line:#29392E; --line-strong:#38503F;
+  --brand:#0A160E; --brand-fg:#D8E8DC; --brand-muted:#7FA28A; --brand-soft:#1F4A2D;
+  --accent:#62B47F; --accent-fg:#0A160E; --accent-soft:#1D3A26;
+  --ok:#7DC797; --ok-bg:#1D3A26; --warn:#E5B567; --warn-bg:#3A2D14; --bad:#EF8F80; --bad-bg:#3E1F1A; --neu:#A9B8AD; --neu-bg:#222F27;
+  --shade:rgba(0,0,0,.55); color-scheme:dark }
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--fg);font:14px/1.5 var(--sans);margin:0}
+button,input,select{font:inherit;color:inherit}
+.app{display:grid;grid-template-columns:216px minmax(0,1fr);min-height:100vh}
+.side{background:var(--brand);color:var(--brand-fg);position:sticky;top:0;height:100vh;display:flex;flex-direction:column;padding-left:env(safe-area-inset-left,0px)}
+.logo{display:flex;align-items:center;gap:10px;padding:22px 20px 6px;font-weight:600;font-size:20px;letter-spacing:-.01em}
+.logo svg{flex:none}
+.tag{padding:0 20px 18px;font-size:11.5px;color:var(--brand-muted);border-bottom:1px solid rgba(255,255,255,.08)}
+.nav{display:flex;flex-direction:column;gap:2px;padding:12px 10px}
+.navgrp{font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--brand-muted);padding:12px 12px 4px}
+.nav button{all:unset;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;border-radius:7px;color:var(--brand-fg);opacity:.78;font-size:14px}
+.nav button:hover{opacity:1;background:rgba(255,255,255,.05)}
+.nav button[aria-current="page"]{opacity:1;background:var(--brand-soft);font-weight:500}
+.nav button:focus-visible{outline:2px solid var(--brand-muted);outline-offset:1px}
+.soon{font-size:10.5px;color:var(--brand-muted)}
+.sidefoot{margin-top:auto;padding:14px 20px;font-size:11px;color:var(--brand-muted);border-top:1px solid rgba(255,255,255,.08);display:flex;flex-direction:column;gap:4px;min-width:0}
+.sidefoot .who{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.linkbtn{all:unset;cursor:pointer;text-decoration:underline;text-underline-offset:2px;align-self:flex-start}
+.linkbtn:focus-visible{outline:2px solid var(--brand-muted);outline-offset:2px}
+main{min-width:0;padding-block:24px 64px;padding-left:max(24px,env(safe-area-inset-left,0px));padding-right:max(24px,env(safe-area-inset-right,0px))}
+.head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px}
+h1{font-size:24px;font-weight:600;margin:0;letter-spacing:-.015em;text-wrap:balance}
+.sub{color:var(--muted);font-size:13px;margin-top:2px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:7px 13px;cursor:pointer;font-size:13.5px;font-weight:500}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+.btn.danger{color:var(--bad);border-color:var(--bad-bg)}
+.btn.ghost{background:transparent;border-color:transparent}
+.btn:focus-visible,.chip:focus-visible,tr[data-open]:focus-visible,tr[data-op]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.btn[disabled]{opacity:.5;cursor:default}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+.summary{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin-bottom:18px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;min-width:0}
+.stat b{display:block;font-family:var(--mono);font-weight:500;font-size:24px;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.stat span{font-size:12px;color:var(--muted)}
+.stat.bad b{color:var(--bad)} .stat.warn b{color:var(--warn)}
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);margin-bottom:14px;overflow-x:auto}
+.tabs button{all:unset;cursor:pointer;padding:9px 14px;font-weight:500;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.tabs button[aria-selected="true"]{color:var(--fg);border-color:var(--accent)}
+.tabs button:focus-visible{outline:2px solid var(--accent)}
+.count{font-family:var(--mono);font-size:11.5px;color:var(--muted);margin-left:5px}
+.filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.chip{all:unset;cursor:pointer;padding:5px 11px;border-radius:999px;border:1px solid var(--line-strong);background:var(--surface);font-size:12.5px}
+.chip[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.field{padding:6px 10px;border:1px solid var(--line-strong);border-radius:8px;background:var(--surface);font-size:13px;min-width:0}
+.search{flex:1 1 200px;max-width:280px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.tablewrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;font-weight:500;color:var(--muted);font-size:11.5px;letter-spacing:.04em;text-transform:uppercase;padding:9px 12px;border-bottom:1px solid var(--line);background:var(--sunk);white-space:nowrap}
+td{padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr[data-open],tr[data-op]{cursor:pointer}
+tr[data-open]:hover td,tr[data-op]:hover td{background:var(--sunk)}
+.id{font-family:var(--mono);font-weight:500;font-size:12.5px;white-space:nowrap}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+.muted{color:var(--muted)}
+.pill{display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:999px;font-size:11.5px;font-weight:500;white-space:nowrap}
+.pill::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.p-ok{background:var(--ok-bg);color:var(--ok)} .p-warn{background:var(--warn-bg);color:var(--warn)}
+.p-bad{background:var(--bad-bg);color:var(--bad)} .p-neu{background:var(--neu-bg);color:var(--neu)}
+.gap{color:var(--warn);font-size:12px;white-space:nowrap}
+.bad{color:var(--bad)}
+.empty{padding:40px 20px;text-align:center;color:var(--muted)}
+.empty strong{display:block;color:var(--fg);font-size:15px;margin-bottom:4px}
+.banner{padding:10px 14px;border-radius:9px;margin-bottom:14px;font-size:13px;background:var(--warn-bg);color:var(--warn);display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.banner ul{margin:4px 0 0;padding-left:18px}
+.banner.err{background:var(--bad-bg);color:var(--bad)}
+.ph{max-width:520px;margin:12vh auto 0;text-align:center}
+.ph h2{font-size:20px;font-weight:600;margin:0 0 6px}
+.ph p{color:var(--muted);margin:0}
+/* inicio de sesión */
+.login{min-height:100vh;display:grid;place-items:center;background:var(--brand);padding-block:24px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.lcard{width:min(380px,100%);background:var(--surface);border-radius:14px;padding:28px 26px;display:flex;flex-direction:column;gap:14px}
+.lcard .logo{padding:0;color:var(--fg)}
+.lcard h1{font-size:20px}
+.lcard .btn{width:100%;padding:9px 13px}
+.lnote{font-size:12px;color:var(--muted);margin:0}
+/* ficha */
+.shade{position:fixed;inset:0;background:var(--shade);z-index:20}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(560px,100%);background:var(--bg);z-index:21;display:flex;flex-direction:column;border-left:1px solid var(--line);
+  padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);padding-right:env(safe-area-inset-right,0px)}
+.dhead{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:16px 20px;border-bottom:1px solid var(--line);background:var(--surface)}
+.dhead h2{margin:0;font-size:17px;font-weight:600}
+.dbody{overflow-y:auto;padding:18px 20px;display:flex;flex-direction:column;gap:20px}
+.dfoot{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:14px 20px;border-top:1px solid var(--line);background:var(--surface)}
+fieldset{border:none;margin:0;padding:0;display:grid;grid-template-columns:1fr 1fr;gap:10px 12px}
+legend{font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:500;margin-bottom:8px;padding:0}
+label.f{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);min-width:0}
+label.f.wide{grid-column:1/-1}
+label.f .field{color:var(--fg);font-size:13.5px;width:100%}
+.need .field{border-color:var(--warn)}
+.calc{grid-column:1/-1;background:var(--sunk);border-radius:9px;padding:10px 12px;font-size:13px;display:flex;gap:18px;flex-wrap:wrap}
+.calc b{font-family:var(--mono);font-weight:500}
+.docrow{grid-column:1/-1;display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) minmax(0,1.1fr);gap:8px;align-items:end}
+.err{color:var(--bad);font-size:12.5px}
+.confirm{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px;color:var(--bad)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:9px;font-size:13px;z-index:40;max-width:calc(100% - 32px)}
+.opform{display:grid;grid-template-columns:repeat(4,minmax(0,1fr)) auto;gap:8px;align-items:end;padding:14px;border-bottom:1px solid var(--line);background:var(--sunk)}
+@media (max-width:900px){.summary{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:760px){
+  .app{grid-template-columns:minmax(0,1fr)}
+  .side{position:static;height:auto;padding-right:env(safe-area-inset-right,0px)}
+  .tag,.navgrp{display:none}
+  .sidefoot{flex-direction:row;justify-content:space-between;align-items:center;padding:8px max(16px,env(safe-area-inset-left,0px));border-top:none}
+  .logo{padding:14px max(16px,env(safe-area-inset-left,0px)) 4px}
+  .nav{flex-direction:row;overflow-x:auto;padding:6px 10px 10px}
+  .nav button{white-space:nowrap}
+  main{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:18px 48px}
+  .summary{grid-template-columns:repeat(2,minmax(0,1fr))}
+  fieldset{grid-template-columns:1fr}
+  .docrow{grid-template-columns:1fr}
+  .opform{grid-template-columns:1fr 1fr}
+}
+@media (prefers-reduced-motion:no-preference){.drawer{animation:slide .18s ease-out}@keyframes slide{from{transform:translateX(24px);opacity:.6}}}
+</style>
+</head>
+<body>
+<div class="login" id="login" hidden>
+  <form class="lcard" id="loginform" novalidate>
+    <div class="logo">
+      <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><rect width="26" height="26" rx="7" fill="#2E7346"/><path d="M5 18h16M5 13.5h16M8 9h10" stroke="#E6F0E8" stroke-width="1.8" stroke-linecap="round"/></svg>
+      Fundo
+    </div>
+    <div><h1>Entrar</h1><div class="sub">Usa el correo y la contraseña que te entregó el administrador.</div></div>
+    <label class="f">Correo<input class="field" id="l-email" type="email" autocomplete="username" required></label>
+    <label class="f">Contraseña<input class="field" id="l-pass" type="password" autocomplete="current-password" required></label>
+    <div class="err" id="l-err" role="alert" hidden></div>
+    <button class="btn primary" type="submit" id="l-btn">Entrar</button>
+    <p class="lnote">¿No tienes cuenta? Pídele al administrador que te cree un usuario.</p>
+  </form>
+</div>
+
+<div class="app" id="app" hidden>
+  <aside class="side">
+    <div class="logo">
+      <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><rect width="26" height="26" rx="7" fill="#2E7346"/><path d="M5 18h16M5 13.5h16M8 9h10" stroke="#E6F0E8" stroke-width="1.8" stroke-linecap="round"/></svg>
+      Fundo
+    </div>
+    <div class="tag">Operaciones agrícolas</div>
+    <nav class="nav" id="nav" aria-label="Módulos"></nav>
+    <div class="sidefoot" id="sidefoot"></div>
+  </aside>
+  <main id="main"></main>
+</div>
+<div id="layer"></div>
+<div id="toast" class="toast" role="status" hidden></div>
+<input type="file" id="xls" accept=".xlsx,.xls" hidden>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+/* Conexión. La clave publicable puede ir en el navegador: lo que cada usuario puede leer o escribir lo deciden las reglas RLS. */
+const SUPABASE_URL='https://ryelugkgjcxxxebinctw.supabase.co';
+const SUPABASE_KEY='sb_publishable_578gWB25lHAmmaOl9kcNpA_ICXwofww';
+const sb=window.supabase?window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY):null;
+
+const MODS=[
+  {grp:'Lechería'},{id:'leche',label:'Leche',soon:true},{id:'rebano',label:'Rebaño',soon:true},
+  {grp:'Maquinaria'},{id:'maquinaria',label:'Equipos'},{id:'mantenciones',label:'Mantenciones',soon:true},{id:'combustible',label:'Combustible',soon:true},
+  {grp:'Infraestructura'},{id:'energia',label:'Energía',soon:true}
+];
+const PH={
+  leche:['Leche','El módulo de producción ya existe en la versión anterior y se traslada a esta página en el próximo paso, junto con el historial completo.'],
+  rebano:['Rebaño','Conteo de animales por fundo, lote y estado. Las vacas en ordeña se cruzarán con las VO del módulo Leche.'],
+  mantenciones:['Mantenciones','Intervenciones preventivas y correctivas por equipo, con repuestos y costos. Alimenta la próxima mantención de cada ficha.'],
+  combustible:['Combustible','Cargas por equipo y operador, con horómetro y consumo en litros por hora. Se podrán agregar y editar aquí mismo.'],
+  energia:['Energía','Consumo eléctrico por edificio y fundo.']
+};
+const TIPO_ORDEN=['Tractor','Camioneta','Camión','Excavadora','Cosechadora','Carro mezclador','Pulverizador','Generador','Remolque','Implemento','Otro'];
+const ESTADOS=['Activa','En reparación','Baja','Vendida'];
+const CENTROS=['S JORGE','S SEBAST','COPIHUE','LOS MELIES','PICHI JUAN','COMPARTIDO'];
+const DOCS=[['perm','Permiso de circulación'],['seguro','Seguro obligatorio'],['rt','Revisión técnica']];
+const DOC_K=Object.fromEntries(DOCS.map(([k,n])=>[n,k]));
+const SITS=['Con fecha','Vencido sin fecha exacta','Vigente sin fecha','No tiene','Sin dato'];
+const SEV={'Vencido':0,'No tiene':1,'Por vencer':2,'Sin dato':3,'Vigente':4};
+const PCLS={'Vencido':'p-bad','No tiene':'p-bad','Por vencer':'p-warn','Sin dato':'p-neu','Vigente':'p-ok','Activa':'p-ok','En reparación':'p-warn','Baja':'p-neu','Vendida':'p-neu'};
+const MES=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+const EQ_COLS=['id_maquina','n_interno','nombre','tipo','marca','modelo','anio','color','patente','n_motor','n_serie','propietario','centro','uso_principal','operador_asignado','estado','intervalo_mant_horas','horometro_inicial'];
+const EQ_NUM=['n_interno','anio','intervalo_mant_horas','horometro_inicial'];
+const RE_EQ=/^[A-Z]{2}-X?[0-9]{2,}[A-Z]?$/;   // igual que la regla de la base: TR-11, CA-01B, IM-X01
+const RE_OP=/^OP-[0-9]{2,}$/;
+
+let TIPOS=TIPO_ORDEN.slice(), SIN_HORAS=new Set(['Remolque']);
+
+const S={mod:'maquinaria',tab:'equipos',q:'',tipo:'Todos',centro:'Todos',docf:'Pendientes',
+  user:null,authReady:false,loginBusy:false,
+  eq:new Map(),docs:new Map(),ops:new Map(),plan:new Map(),loaded:false,loading:false,loadErr:'',loadedAt:0,
+  open:null,confirmDel:false,formErr:'',opEdit:null,saving:false,importIssues:[]};
+
+const $=s=>document.querySelector(s);
+const esc=v=>v==null?'':String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const nf=new Intl.NumberFormat('es-CL',{maximumFractionDigits:1});
+const fmtN=v=>v==null||v===''||isNaN(v)?'—':nf.format(v);
+const fmtYm=ym=>ym?MES[+ym.slice(5,7)-1]+' '+ym.slice(0,4):'—';
+const pick=(o,cols)=>Object.fromEntries(cols.map(c=>[c,o&&o[c]!==undefined?o[c]:null]));
+const today=new Date();
+
+function toast(t){const el=$('#toast');el.textContent=t;el.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>el.hidden=true,3600)}
+
+/* ---------- reglas ---------- */
+function docState(d){
+  if(!d) return 'Sin dato';
+  const s=d.situacion;
+  if(s==='Con fecha'&&d.vencimiento){
+    const [y,m]=d.vencimiento.split('-').map(Number);
+    const end=new Date(y,m,0,23,59);
+    const days=(end-today)/864e5;
+    return days<0?'Vencido':days<=60?'Por vencer':'Vigente';
+  }
+  if(s==='Vencido sin fecha exacta') return 'Vencido';
+  if(s==='Vigente sin fecha') return 'Vigente';
+  if(s==='No tiene') return 'No tiene';
+  return 'Sin dato';
+}
+const docsOf=id=>DOCS.map(([k,name])=>({k,name,d:S.docs.get(id+'__'+k)}));
+function worstDoc(id){let w='Vigente';for(const x of docsOf(id)){const st=docState(x.d);if(SEV[st]<SEV[w])w=st}return w}
+function gaps(e){
+  const g=[];
+  if(!e.centro)g.push('centro');
+  if(!e.uso_principal)g.push('uso');
+  if(!e.operador_asignado)g.push('operador');
+  if(!SIN_HORAS.has(e.tipo)){if(e.intervalo_mant_horas==null)g.push('intervalo');if(e.horometro_inicial==null)g.push('horómetro')}
+  return g;
+}
+/* Horómetro actual y próxima mantención vienen calculados de la vista v_proxima_mantencion. */
+const horoActual=e=>{const p=S.plan.get(e.id_maquina);return p&&p.horometro_actual!=null?p.horometro_actual:e.horometro_inicial};
+function mant(e){
+  if(SIN_HORAS.has(e.tipo)) return {txt:'No aplica',cls:'muted'};
+  if(e.intervalo_mant_horas==null) return {txt:'Sin plan',cls:'muted'};
+  const p=S.plan.get(e.id_maquina);
+  const prox=p&&p.proxima_mant_horometro!=null?p.proxima_mant_horometro:(e.horometro_inicial!=null?e.horometro_inicial+e.intervalo_mant_horas:null);
+  if(prox==null) return {txt:'Falta horómetro',cls:'gap'};
+  const rest=p&&p.horas_restantes!=null?p.horas_restantes:null;
+  if(rest!=null&&rest<=0) return {txt:'Vencida ('+fmtN(prox)+' h)',cls:'bad',prox};
+  return {txt:'a las '+fmtN(prox)+' h',cls:'',prox};
+}
+
+/* ---------- sesión ---------- */
+function showAuth(){
+  const inApp=!!S.user;
+  $('#login').hidden=inApp||!S.authReady;
+  $('#app').hidden=!inApp;
+  if(inApp) render(); else if(S.authReady) setTimeout(()=>{const el=$('#l-email');if(el&&!el.value)el.focus()},0);
+}
+function loginMsg(e){
+  const m=(e&&e.message||'').toLowerCase();
+  if(m.includes('invalid login')) return 'Correo o contraseña incorrectos.';
+  if(m.includes('email not confirmed')) return 'Tu correo aún no está confirmado. Pídele al administrador que lo confirme en Supabase.';
+  if(m.includes('fetch')||m.includes('network')) return 'No hay conexión con el servidor. Revisa internet e inténtalo de nuevo.';
+  return 'No se pudo iniciar sesión: '+(e&&e.message||'error desconocido')+'.';
+}
+async function login(){
+  const email=$('#l-email').value.trim(), password=$('#l-pass').value;
+  const err=$('#l-err');
+  if(!email||!password){err.textContent='Escribe tu correo y tu contraseña.';err.hidden=false;return}
+  S.loginBusy=true;$('#l-btn').disabled=true;$('#l-btn').textContent='Entrando…';err.hidden=true;
+  const {error}=await sb.auth.signInWithPassword({email,password});
+  S.loginBusy=false;$('#l-btn').disabled=false;$('#l-btn').textContent='Entrar';
+  if(error){err.textContent=loginMsg(error);err.hidden=false}
+  else $('#l-pass').value='';
+}
+async function logout(){await sb.auth.signOut();toast('Sesión cerrada')}
+
+/* ---------- datos ---------- */
+async function load(){
+  if(S.loading) return;
+  S.loading=true;
+  const [eq,dc,op,tp,pm]=await Promise.all([
+    sb.from('equipos').select(EQ_COLS.join(',')),
+    sb.from('documentos').select('id_maquina,documento,vencimiento,situacion,texto_original'),
+    sb.from('operadores').select('id_operador,nombre,centro,activo'),
+    sb.from('tipos_equipo').select('tipo,usa_horometro'),
+    sb.from('v_proxima_mantencion').select('id_maquina,horometro_actual,proxima_mant_horometro,horas_restantes,estado_plan')
+  ]);
+  S.loading=false;
+  const bad=[eq,dc,op,tp,pm].find(r=>r.error);
+  if(bad){S.loadErr=errMsg(bad.error);if(isAuthErr(bad.error)){await sb.auth.signOut();return}render();return}
+  S.loadErr='';S.loaded=true;S.loadedAt=Date.now();
+  const tipos=tp.data.map(t=>t.tipo);
+  TIPOS=[...TIPO_ORDEN.filter(t=>tipos.includes(t)),...tipos.filter(t=>!TIPO_ORDEN.includes(t))];
+  SIN_HORAS=new Set(tp.data.filter(t=>!t.usa_horometro).map(t=>t.tipo));
+  S.eq=new Map(eq.data.map(e=>[e.id_maquina,e]));
+  S.docs=new Map(dc.data.filter(d=>DOC_K[d.documento]).map(d=>[d.id_maquina+'__'+DOC_K[d.documento],{...d,vencimiento:d.vencimiento?d.vencimiento.slice(0,7):null}]));
+  S.ops=new Map(op.data.map(o=>[o.id_operador,{...o,activo:o.activo?'Sí':'No'}]));
+  S.plan=new Map(pm.data.map(p=>[p.id_maquina,p]));
+  render();
+}
+function clearData(){S.eq=new Map();S.docs=new Map();S.ops=new Map();S.plan=new Map();S.loaded=false;S.open=null;S.opEdit=null;S.importIssues=[]}
+const isAuthErr=e=>e&&(e.code==='PGRST301'||e.code==='PGRST303'||/jwt/i.test(e.message||''));
+/* Filas tal como las guarda la base. */
+const eqRow=e=>pick(e,EQ_COLS);
+const docRow=d=>({id_maquina:d.id_maquina,documento:d.documento,situacion:d.situacion,vencimiento:d.vencimiento?d.vencimiento+'-01':null,texto_original:d.texto_original??null});
+const opRow=o=>({id_operador:o.id_operador,nombre:o.nombre,centro:o.centro||null,activo:o.activo!=='No'});
+async function upsert(table,rows,onConflict){
+  if(!rows.length) return;
+  const {error}=await sb.from(table).upsert(rows,{onConflict});
+  if(error) throw error;
+}
+function errMsg(e){
+  if(!e) return 'No se pudo guardar. Inténtalo de nuevo.';
+  if(isAuthErr(e)) return 'Tu sesión expiró. Vuelve a iniciar sesión.';
+  if(e.code==='42501') return 'No tienes permiso para hacer este cambio.';
+  if(e.code==='23505') return 'Ya existe un registro con esa clave.';
+  if(e.code==='23503') return /operador/i.test(e.message||'')?'El operador indicado no existe. Agrégalo primero en la pestaña Operadores.':'Falta un dato relacionado: revisa que el equipo, el operador y el centro existan.';
+  if(e.code==='23514') return 'Hay un valor fuera de formato: revisa el ID (ej. TR-30), el año y los números de la ficha.';
+  if(/fetch|network/i.test(e.message||'')) return 'No hay conexión con la base de datos. Revisa internet e inténtalo de nuevo.';
+  return 'No se pudo guardar: '+(e.message||'error desconocido')+'.';
+}
+
+/* ---------- render ---------- */
+function renderNav(){
+  $('#nav').innerHTML=MODS.map(m=>m.grp?`<div class="navgrp">${m.grp}</div>`:
+    `<button data-mod="${m.id}" ${S.mod===m.id?'aria-current="page"':''}>${m.label}${m.soon?'<span class="soon">pronto</span>':''}</button>`).join('');
+  $('#sidefoot').innerHTML=`<span class="who" title="${esc(S.user?.email)}">${esc(S.user?.email||'')}</span><button class="linkbtn" data-act="logout">Cerrar sesión</button>`;
+}
+function render(){
+  if(!S.user) return;
+  renderNav();
+  const m=$('#main');
+  if(S.mod!=='maquinaria'){const [t,p]=PH[S.mod];m.innerHTML=`<div class="ph"><h2>${t}</h2><p>${p}</p></div>`;renderDrawer();return}
+  const eqs=[...S.eq.values()];
+  const active=eqs.filter(e=>e.estado!=='Baja'&&e.estado!=='Vendida');
+  const rep=eqs.filter(e=>e.estado==='En reparación').length;
+  const vencidos=eqs.filter(e=>SEV[worstDoc(e.id_maquina)]<=1).length;
+  const porvencer=eqs.filter(e=>worstDoc(e.id_maquina)==='Por vencer').length;
+  const incompletas=active.filter(e=>gaps(e).length).length;
+  const loading=!S.loaded&&!S.loadErr;
+  const off=!S.loaded;
+  const tabs=[['equipos','Equipos',eqs.length],['documentos','Documentos',null],['operadores','Operadores',S.ops.size]];
+  m.innerHTML=`
+  <div class="head">
+    <div><h1>Equipos</h1><div class="sub">Ficha, estado y documentación de la maquinaria de los fundos</div></div>
+    <div class="actions">
+      <button class="btn" data-act="import" ${off?'disabled':''}>Importar Excel</button>
+      <button class="btn primary" data-act="new" ${off?'disabled':''}>Nuevo equipo</button>
+    </div>
+  </div>
+  ${S.loadErr?`<div class="banner err">${esc(S.loadErr)} <button class="btn" data-act="reload">Reintentar</button></div>`:''}
+  ${S.importIssues.length?`<div class="banner"><div><b>Filas que no se importaron (${S.importIssues.length})</b><ul>${S.importIssues.slice(0,8).map(i=>`<li>${esc(i)}</li>`).join('')}${S.importIssues.length>8?`<li>y ${S.importIssues.length-8} más</li>`:''}</ul></div><button class="btn ghost" data-act="issues-close">Cerrar</button></div>`:''}
+  <div class="summary">
+    <div class="stat"><b>${loading?'…':active.length}</b><span>Equipos activos</span></div>
+    <div class="stat ${rep?'warn':''}"><b>${loading?'…':rep}</b><span>En reparación</span></div>
+    <div class="stat ${vencidos?'bad':''}"><b>${loading?'…':vencidos}</b><span>Con documentos vencidos o sin tener</span></div>
+    <div class="stat ${porvencer?'warn':''}"><b>${loading?'…':porvencer}</b><span>Documentos por vencer (60 días)</span></div>
+    <div class="stat ${incompletas?'warn':''}"><b>${loading?'…':incompletas}</b><span>Fichas incompletas</span></div>
+  </div>
+  <div class="tabs" role="tablist">${tabs.map(([k,l,c])=>`<button role="tab" data-tab="${k}" aria-selected="${S.tab===k}">${l}${c!=null?`<span class="count">${c}</span>`:''}</button>`).join('')}</div>
+  <div id="pane"></div>`;
+  if(S.tab==='equipos') renderEquipos(eqs,loading);
+  else if(S.tab==='documentos') renderDocumentos(eqs,loading);
+  else renderOperadores();
+  renderDrawer();
+}
+function renderEquipos(eqs,loading){
+  const tiposPresentes=['Todos',...TIPOS.filter(t=>eqs.some(e=>e.tipo===t))];
+  const q=S.q.trim().toLowerCase();
+  const rows=eqs.filter(e=>(S.tipo==='Todos'||e.tipo===S.tipo)&&(S.centro==='Todos'||(S.centro==='Sin centro'?!e.centro:e.centro===S.centro))
+    &&(!q||[e.id_maquina,e.nombre,e.marca,e.modelo,e.patente,e.propietario].some(v=>v&&String(v).toLowerCase().includes(q))))
+    .sort((a,b)=>(TIPOS.indexOf(a.tipo)-TIPOS.indexOf(b.tipo))||a.id_maquina.localeCompare(b.id_maquina,undefined,{numeric:true}));
+  const opName=id=>id&&S.ops.get(id)?S.ops.get(id).nombre:id;
+  $('#pane').innerHTML=`
+  <div class="filters">
+    ${tiposPresentes.map(t=>`<button class="chip" data-tipo="${esc(t)}" aria-pressed="${S.tipo===t}">${esc(t)}</button>`).join('')}
+    <select class="field" id="f-centro" aria-label="Centro">${['Todos','Sin centro',...CENTROS].map(c=>`<option ${S.centro===c?'selected':''}>${c}</option>`).join('')}</select>
+    <input class="field search" id="f-q" placeholder="Buscar nombre, patente, marca…" value="${esc(S.q)}" aria-label="Buscar">
+  </div>
+  <div class="card"><div class="tablewrap">
+  ${loading?'<div class="empty">Cargando equipos…</div>':!eqs.length?`<div class="empty"><strong>Aún no hay equipos</strong>Importa el Excel de maquinaria o crea el primer equipo con “Nuevo equipo”.</div>`:!rows.length?'<div class="empty">Ningún equipo coincide con los filtros.</div>':`
+  <table><thead><tr><th>ID</th><th>Equipo</th><th>Tipo</th><th>Centro</th><th>Operador</th><th>Estado</th><th class="num">Horómetro</th><th>Próx. mantención</th><th>Documentos</th><th>Ficha</th></tr></thead><tbody>
+  ${rows.map(e=>{const g=gaps(e),mt=mant(e),wd=worstDoc(e.id_maquina);return `<tr data-open="${esc(e.id_maquina)}" tabindex="0">
+    <td class="id">${esc(e.id_maquina)}</td>
+    <td><div>${esc(e.nombre)}</div><div class="muted" style="font-size:12px">${esc([e.marca,e.modelo,e.patente].filter(Boolean).join(' · '))}</div></td>
+    <td>${esc(e.tipo)}</td><td>${e.centro?esc(e.centro):'<span class="gap">Sin centro</span>'}</td>
+    <td>${e.operador_asignado?esc(opName(e.operador_asignado)):'<span class="muted">—</span>'}</td>
+    <td><span class="pill ${PCLS[e.estado]||'p-neu'}">${esc(e.estado||'—')}</span></td>
+    <td class="num">${SIN_HORAS.has(e.tipo)?'<span class="muted">—</span>':fmtN(horoActual(e))}</td>
+    <td class="${mt.cls}">${mt.txt}</td>
+    <td><span class="pill ${PCLS[wd]}">${wd}</span></td>
+    <td>${g.length?`<span class="gap">Falta ${g.length}</span>`:'<span class="pill p-ok">Completa</span>'}</td></tr>`}).join('')}
+  </tbody></table>`}
+  </div></div>`;
+}
+function renderDocumentos(eqs,loading){
+  const list=[];
+  for(const e of eqs) for(const x of docsOf(e.id_maquina)) list.push({e,...x,st:docState(x.d)});
+  const groups=['Pendientes','Vencido','No tiene','Por vencer','Sin dato','Vigente','Todos'];
+  const f=S.docf;
+  const rows=list.filter(r=>f==='Todos'||(f==='Pendientes'?SEV[r.st]<=2:r.st===f))
+    .sort((a,b)=>SEV[a.st]-SEV[b.st]||(a.d?.vencimiento||'9').localeCompare(b.d?.vencimiento||'9')||a.e.id_maquina.localeCompare(b.e.id_maquina,undefined,{numeric:true}));
+  const cnt=g=>list.filter(r=>g==='Todos'||(g==='Pendientes'?SEV[r.st]<=2:r.st===g)).length;
+  $('#pane').innerHTML=`
+  <div class="filters">${groups.map(g=>`<button class="chip" data-docf="${g}" aria-pressed="${f===g}">${g} <span class="count">${cnt(g)}</span></button>`).join('')}</div>
+  <div class="card"><div class="tablewrap">
+  ${loading?'<div class="empty">Cargando documentos…</div>':!rows.length?'<div class="empty">No hay documentos en este grupo.</div>':`
+  <table><thead><tr><th>Equipo</th><th>Documento</th><th>Vencimiento</th><th>Estado</th><th>Dato original</th></tr></thead><tbody>
+  ${rows.map(r=>`<tr data-open="${esc(r.e.id_maquina)}" tabindex="0"><td><span class="id">${esc(r.e.id_maquina)}</span> <span class="muted">${esc(r.e.nombre)}</span></td>
+    <td>${r.name}</td><td class="num" style="text-align:left">${fmtYm(r.d?.vencimiento)}</td>
+    <td><span class="pill ${PCLS[r.st]}">${r.st}</span></td><td class="muted">${esc(r.d?.texto_original||'')}</td></tr>`).join('')}
+  </tbody></table>`}
+  </div></div>
+  <p class="muted" style="font-size:12px;margin-top:10px">Un documento con mes de vencimiento se considera vigente hasta el último día de ese mes. “Por vencer” = vence en los próximos 60 días.</p>`;
+}
+function renderOperadores(){
+  const ops=[...S.ops.values()].sort((a,b)=>a.id_operador.localeCompare(b.id_operador,undefined,{numeric:true}));
+  const ed=S.opEdit;
+  const asign=id=>[...S.eq.values()].filter(e=>e.operador_asignado===id).map(e=>e.id_maquina);
+  $('#pane').innerHTML=`<div class="card">
+  <form class="opform" id="opform" novalidate>
+    <label class="f">ID<input class="field" id="op-id" required placeholder="OP-01" value="${esc(ed?.id_operador||'')}" ${ed?'readonly':''}></label>
+    <label class="f">Nombre<input class="field" id="op-nombre" required value="${esc(ed?.nombre||'')}"></label>
+    <label class="f">Centro<select class="field" id="op-centro"><option value="">—</option>${CENTROS.map(c=>`<option ${ed?.centro===c?'selected':''}>${c}</option>`).join('')}</select></label>
+    <label class="f">Activo<select class="field" id="op-activo">${['Sí','No'].map(v=>`<option ${(ed?.activo||'Sí')===v?'selected':''}>${v}</option>`).join('')}</select></label>
+    <div class="actions"><button class="btn primary" type="submit" ${!S.loaded||S.saving?'disabled':''}>${ed?'Guardar':'Agregar'}</button>${ed?'<button class="btn ghost" type="button" data-act="op-cancel">Cancelar</button>':''}</div>
+    <div class="err" id="op-err" style="grid-column:1/-1" ${S.formErr?'':'hidden'}>${esc(S.formErr)}</div>
+  </form>
+  <div class="tablewrap">${!ops.length?`<div class="empty"><strong>Aún no hay operadores</strong>Agrégalos arriba. Después podrás asignarlos a cada equipo y registrarlos en cada carga de combustible.</div>`:`
+  <table><thead><tr><th>ID</th><th>Nombre</th><th>Centro</th><th>Activo</th><th>Equipos asignados</th></tr></thead><tbody>
+  ${ops.map(o=>`<tr data-op="${esc(o.id_operador)}" tabindex="0"><td class="id">${esc(o.id_operador)}</td><td>${esc(o.nombre)}</td><td>${esc(o.centro||'—')}</td><td>${esc(o.activo)}</td><td class="id muted">${asign(o.id_operador).join(', ')||'—'}</td></tr>`).join('')}
+  </tbody></table>`}</div></div>`;
+}
+
+/* ---------- ficha ---------- */
+function opt(list,val,blank=true){return (blank?'<option value="">—</option>':'')+list.map(v=>{const [k,l]=Array.isArray(v)?v:[v,v];return `<option value="${esc(k)}" ${val===k?'selected':''}>${esc(l)}</option>`}).join('')}
+function fld(id,label,val,{type='text',wide=false,need=false,list=null,ro=false,ph=''}={}){
+  const inner=list?`<select class="field" id="${id}" ${ro?'disabled':''}>${list}</select>`:
+    `<input class="field" id="${id}" type="${type}" value="${esc(val??'')}" ${ro?'readonly':''} ${type==='number'?'inputmode="decimal" min="0" step="any"':''} placeholder="${esc(ph)}">`;
+  return `<label class="f ${wide?'wide':''} ${need?'need':''}">${label}${inner}</label>`;
+}
+function renderDrawer(){
+  const L=$('#layer');
+  if(!S.open||!S.user){L.innerHTML='';return}
+  const isNew=S.open==='__new';
+  const e=isNew?{estado:'Activa',tipo:'Tractor'}:S.eq.get(S.open);
+  if(!e){S.open=null;L.innerHTML='';return}
+  const id=e.id_maquina||'';
+  const ro=!S.loaded||S.saving;
+  const g=isNew?[]:gaps(e); const need=k=>g.includes(k);
+  const mt=isNew?null:mant(e);
+  const ops=[...S.ops.values()].map(o=>[o.id_operador,o.id_operador+' · '+o.nombre]);
+  if(e.operador_asignado&&!S.ops.has(e.operador_asignado)) ops.push([e.operador_asignado,e.operador_asignado+' (no registrado)']);
+  L.innerHTML=`<div class="shade" data-act="close"></div>
+  <section class="drawer" role="dialog" aria-modal="true" aria-labelledby="dtitle">
+    <div class="dhead"><div><div class="id muted">${isNew?'Nuevo equipo':esc(id)}</div><h2 id="dtitle">${isNew?'Ficha del equipo':esc(e.nombre||id)}</h2></div>
+      <button class="btn ghost" data-act="close" aria-label="Cerrar">Cerrar</button></div>
+    <form class="dbody" id="eqform" novalidate>
+      ${!isNew&&g.length?`<div class="banner" style="margin:0">Falta completar: ${g.join(', ')}.</div>`:''}
+      <fieldset><legend>Identificación</legend>
+        ${fld('e-id','ID del equipo',id,{ro:!isNew,ph:'TR-30'})}
+        ${fld('e-num','N° interno',e.n_interno,{type:'number'})}
+        ${fld('e-nombre','Nombre',e.nombre,{wide:true})}
+        ${fld('e-tipo','Tipo',null,{list:opt(TIPOS,e.tipo,false)})}
+        ${fld('e-estado','Estado',null,{list:opt(ESTADOS,e.estado,false)})}
+        ${fld('e-marca','Marca',e.marca)}${fld('e-modelo','Modelo',e.modelo)}
+        ${fld('e-anio','Año',e.anio,{type:'number'})}${fld('e-color','Color',e.color)}
+        ${fld('e-patente','Patente',e.patente)}${fld('e-prop','Propietario',e.propietario)}
+        ${fld('e-motor','N° motor',e.n_motor)}${fld('e-serie','N° serie',e.n_serie)}
+      </fieldset>
+      <fieldset><legend>Operación</legend>
+        ${fld('e-centro','Centro',null,{list:opt(CENTROS,e.centro),need:need('centro')})}
+        ${fld('e-op','Operador asignado',null,{list:opt(ops,e.operador_asignado),need:need('operador')})}
+        ${fld('e-uso','Uso principal',e.uso_principal,{wide:true,need:need('uso'),ph:'Alimentación, siembra, purines…'})}
+      </fieldset>
+      <fieldset><legend>Mantención</legend>
+        ${fld('e-iv','Intervalo de mantención (horas)',e.intervalo_mant_horas,{type:'number',need:need('intervalo'),ph:'250'})}
+        ${fld('e-h0','Horómetro inicial (h)',e.horometro_inicial,{type:'number',need:need('horómetro')})}
+        ${mt?`<div class="calc"><span>Horómetro actual <b>${SIN_HORAS.has(e.tipo)?'—':fmtN(horoActual(e))}</b></span><span>Próxima mantención <b>${mt.txt}</b></span></div>
+        <p class="muted" style="grid-column:1/-1;margin:0;font-size:12px">El horómetro actual se actualiza solo con las cargas de combustible y las mantenciones registradas.</p>`:''}
+      </fieldset>
+      <fieldset><legend>Documentos</legend>
+        ${DOCS.map(([k,name])=>{const d=isNew?null:S.docs.get(id+'__'+k);return `<div class="docrow">
+          <label class="f">${name}<select class="field" id="d-${k}-sit">${opt(SITS,d?.situacion||'Sin dato',false)}</select></label>
+          <label class="f">Vence (mes)<input class="field" type="month" id="d-${k}-v" value="${esc(d?.vencimiento||'')}"></label>
+          <label class="f">Estado<span class="pill ${PCLS[docState(d)]}" style="align-self:flex-start;margin-top:6px">${docState(d)}</span></label></div>`}).join('')}
+      </fieldset>
+      <div class="err" ${S.formErr?'':'hidden'}>${esc(S.formErr)}</div>
+    </form>
+    <div class="dfoot">
+      <div>${isNew?'':S.confirmDel?`<span class="confirm">¿Eliminar ${esc(id)} y sus documentos? <button class="btn danger" data-act="del-yes" ${ro?'disabled':''}>Eliminar</button><button class="btn ghost" data-act="del-no">Cancelar</button></span>`:`<button class="btn danger" data-act="del" ${ro?'disabled':''}>Eliminar equipo</button>`}</div>
+      <div class="actions"><button class="btn ghost" data-act="close">Cancelar</button><button class="btn primary" data-act="save" ${ro?'disabled':''}>${S.saving?'Guardando…':'Guardar ficha'}</button></div>
+    </div>
+  </section>`;
+}
+const val=id=>{const el=document.getElementById(id);if(!el)return null;const v=el.value.trim();return v===''?null:v};
+const numv=(id,dec=0)=>{const v=val(id);if(v==null)return null;const n=+v.replace(',','.');if(isNaN(n))return null;const f=10**dec;return Math.round(n*f)/f};
+async function saveEquipo(){
+  if(S.saving) return;
+  const isNew=S.open==='__new';
+  const id=((isNew?val('e-id'):S.open)||'').toUpperCase();
+  if(!RE_EQ.test(id)){S.formErr='El ID debe ser el prefijo del tipo, un guion y un número de dos cifras o más, por ejemplo TR-30 o CA-X06.';renderDrawer();return}
+  if(isNew&&S.eq.has(id)){S.formErr=`Ya existe un equipo con el ID ${id}.`;renderDrawer();return}
+  if(!val('e-nombre')){S.formErr='El equipo necesita un nombre.';renderDrawer();return}
+  const anio=numv('e-anio');
+  if(anio!=null&&(anio<1950||anio>2100)){S.formErr='El año debe estar entre 1950 y 2100.';renderDrawer();return}
+  const iv=numv('e-iv');
+  if(iv!=null&&iv<=0){S.formErr='El intervalo de mantención debe ser mayor que cero.';renderDrawer();return}
+  const e={...eqRow(S.eq.get(id)||{}),id_maquina:id,n_interno:numv('e-num'),nombre:val('e-nombre'),tipo:val('e-tipo'),estado:val('e-estado'),marca:val('e-marca'),modelo:val('e-modelo'),
+    anio,color:val('e-color'),patente:val('e-patente'),propietario:val('e-prop'),n_motor:val('e-motor'),n_serie:val('e-serie'),
+    centro:val('e-centro'),operador_asignado:val('e-op'),uso_principal:val('e-uso'),intervalo_mant_horas:iv,horometro_inicial:numv('e-h0',1)};
+  const docs=[];
+  for(const [k,name] of DOCS){
+    let sit=val(`d-${k}-sit`)||'Sin dato'; const v=val(`d-${k}-v`);
+    if(v&&sit!=='Con fecha') sit='Con fecha';
+    if(sit==='Con fecha'&&!v){S.formErr=`Indica el mes de vencimiento de ${name.toLowerCase()} o cambia su situación.`;renderDrawer();return}
+    const old=S.docs.get(id+'__'+k);
+    const d={id_maquina:id,documento:name,situacion:sit,vencimiento:sit==='Con fecha'?v:null,texto_original:old?old.texto_original:null};
+    if(!old||old.situacion!==d.situacion||(old.vencimiento||null)!==d.vencimiento) docs.push(docRow(d));
+  }
+  S.formErr='';S.saving=true;renderDrawer();
+  try{
+    await upsert('equipos',[e],'id_maquina');
+    await upsert('documentos',docs,'id_maquina,documento');
+    S.saving=false;S.open=null;S.confirmDel=false;toast(`Ficha de ${id} guardada`);await load();
+  }catch(err){S.saving=false;S.formErr=errMsg(err);renderDrawer()}
+}
+async function deleteEquipo(){
+  const id=S.open;
+  S.saving=true;renderDrawer();
+  try{
+    const [c,m]=await Promise.all([
+      sb.from('combustible').select('id_carga',{count:'exact',head:true}).eq('id_maquina',id),
+      sb.from('mantenciones').select('id_intervencion',{count:'exact',head:true}).eq('id_maquina',id)]);
+    if(c.error) throw c.error; if(m.error) throw m.error;
+    if((c.count||0)+(m.count||0)>0){S.saving=false;S.confirmDel=false;S.formErr=`${id} tiene cargas de combustible o mantenciones registradas, así que no se puede eliminar. Cambia su estado a “Baja” o “Vendida”.`;renderDrawer();return}
+    let r=await sb.from('documentos').delete().eq('id_maquina',id); if(r.error) throw r.error;
+    r=await sb.from('equipos').delete().eq('id_maquina',id); if(r.error) throw r.error;
+    S.saving=false;S.open=null;S.confirmDel=false;toast(`${id} eliminado`);await load();
+  }catch(err){S.saving=false;S.formErr=errMsg(err);renderDrawer()}
+}
+
+/* ---------- importar Excel (upsert por clave; nunca borra) ---------- */
+const key=h=>String(h).trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
+const clean=v=>{if(v==null)return null;if(v instanceof Date)return v;const t=String(v).trim();return t===''?null:(typeof v==='number'?v:t)};
+const ym=v=>{if(v instanceof Date)return `${v.getFullYear()}-${String(v.getMonth()+1).padStart(2,'0')}`;if(typeof v==='string'){const m=v.match(/^(\d{4})-(\d{2})/);if(m)return m[1]+'-'+m[2]}return null};
+const yes=v=>v==null?true:!/^(no|n|false|0)$/i.test(String(v).trim());
+async function importXls(file){
+  if(typeof XLSX==='undefined'){toast('No se pudo cargar el lector de Excel. Recarga la página.');return}
+  let wb;try{wb=XLSX.read(await file.arrayBuffer(),{cellDates:true})}catch(e){toast('El archivo no se pudo leer como Excel.');return}
+  const sheet=n=>{const s=wb.SheetNames.find(x=>key(x)===n);return s?XLSX.utils.sheet_to_json(wb.Sheets[s],{defval:null,raw:true}).map(r=>Object.fromEntries(Object.entries(r).map(([k,v])=>[key(k),clean(v)]))):[]};
+  const issues=[];
+  const ops=[],opIds=new Set(S.ops.keys());
+  sheet('operadores').forEach((r,i)=>{
+    const id=r.id_operador&&String(r.id_operador).trim().toUpperCase();
+    if(!id) return;
+    if(!RE_OP.test(id)){issues.push(`Operadores fila ${i+2}: ID “${id}” no tiene el formato OP-01.`);return}
+    if(!r.nombre){issues.push(`Operadores fila ${i+2}: ${id} sin nombre.`);return}
+    if(r.centro&&!CENTROS.includes(String(r.centro))){issues.push(`Operadores fila ${i+2}: centro “${r.centro}” no existe.`);return}
+    ops.push({id_operador:id,nombre:String(r.nombre),centro:r.centro?String(r.centro):null,activo:yes(r.activo)});opIds.add(id);
+  });
+  const eqs=[],eqIds=new Set(S.eq.keys());let nE=0,uE=0;
+  sheet('equipos').forEach((r,i)=>{
+    const id=r.id_maquina&&String(r.id_maquina).trim().toUpperCase();
+    if(!id) return;
+    const f=`Equipos fila ${i+2} (${id})`;
+    if(!RE_EQ.test(id)){issues.push(`${f}: el ID no tiene el formato TR-30.`);return}
+    const prev=S.eq.get(id);
+    const e={...eqRow(prev||{}),id_maquina:id};
+    for(const c of EQ_COLS.slice(1)) if(r[c]!=null) e[c]=EQ_NUM.includes(c)?(isNaN(+r[c])?null:(c==='horometro_inicial'?Math.round(+r[c]*10)/10:Math.round(+r[c]))):String(r[c]);
+    if(!e.nombre){issues.push(`${f}: falta el nombre.`);return}
+    if(!TIPOS.includes(e.tipo)){issues.push(`${f}: tipo “${e.tipo??''}” no existe.`);return}
+    if(e.estado==null) e.estado='Activa';
+    if(!ESTADOS.includes(e.estado)){issues.push(`${f}: estado “${e.estado}” no existe.`);return}
+    if(e.centro&&!CENTROS.includes(e.centro)){issues.push(`${f}: centro “${e.centro}” no existe.`);return}
+    if(e.operador_asignado&&!opIds.has(e.operador_asignado)){issues.push(`${f}: el operador ${e.operador_asignado} no existe en Operadores.`);return}
+    prev?uE++:nE++;eqs.push(e);eqIds.add(id);
+  });
+  const docs=[];
+  sheet('documentos').forEach((r,i)=>{
+    const id=r.id_maquina&&String(r.id_maquina).trim().toUpperCase(); const dk=DOCS.find(([,n])=>key(n)===key(r.documento||''));
+    if(!id) return;
+    if(!dk){issues.push(`Documentos fila ${i+2}: documento “${r.documento??''}” no reconocido.`);return}
+    if(!eqIds.has(id)){issues.push(`Documentos fila ${i+2}: el equipo ${id} no existe.`);return}
+    const v=ym(r.vencimiento);
+    const sit=SITS.includes(r.situacion)?r.situacion:(v?'Con fecha':'Sin dato');
+    if(sit==='Con fecha'&&!v){issues.push(`Documentos fila ${i+2} (${id}): “Con fecha” sin mes de vencimiento.`);return}
+    docs.push(docRow({id_maquina:id,documento:dk[1],situacion:sit,vencimiento:sit==='Con fecha'?v:null,texto_original:r.texto_original==null?null:String(r.texto_original)}));
+  });
+  if(!ops.length&&!eqs.length&&!docs.length){S.importIssues=issues;render();toast('No encontré hojas Equipos, Documentos u Operadores con datos válidos.');return}
+  toast('Importando…');
+  try{
+    await upsert('operadores',ops,'id_operador');
+    await upsert('equipos',eqs,'id_maquina');
+    await upsert('documentos',docs,'id_maquina,documento');
+  }catch(err){S.importIssues=issues;toast(errMsg(err));await load();return}
+  S.importIssues=issues;
+  toast(`${nE} equipos nuevos · ${uE} actualizados · ${docs.length} documentos · ${ops.length} operadores${issues.length?` · ${issues.length} filas omitidas`:''}`);
+  await load();
+}
+
+/* ---------- eventos ---------- */
+document.addEventListener('click',ev=>{
+  const t=ev.target.closest('[data-mod],[data-tab],[data-tipo],[data-docf],[data-act],[data-open],[data-op]'); if(!t)return;
+  if(t.dataset.mod){S.mod=t.dataset.mod;S.open=null;render();return}
+  if(t.dataset.tab){S.tab=t.dataset.tab;S.formErr='';render();return}
+  if(t.dataset.tipo){S.tipo=t.dataset.tipo;render();return}
+  if(t.dataset.docf){S.docf=t.dataset.docf;render();return}
+  if(t.dataset.open){S.open=t.dataset.open;S.formErr='';S.confirmDel=false;renderDrawer();return}
+  if(t.dataset.op){S.opEdit=S.ops.get(t.dataset.op)||null;S.formErr='';render();return}
+  const a=t.dataset.act;
+  if(a==='close'){if(S.saving)return;S.open=null;S.formErr='';S.confirmDel=false;renderDrawer()}
+  else if(a==='new'){S.open='__new';S.formErr='';renderDrawer()}
+  else if(a==='save'){ev.preventDefault();saveEquipo()}
+  else if(a==='del'){S.confirmDel=true;renderDrawer()}
+  else if(a==='del-no'){S.confirmDel=false;renderDrawer()}
+  else if(a==='del-yes'){deleteEquipo()}
+  else if(a==='import'){$('#xls').click()}
+  else if(a==='op-cancel'){S.opEdit=null;S.formErr='';render()}
+  else if(a==='reload'){S.loadErr='';render();load()}
+  else if(a==='issues-close'){S.importIssues=[];render()}
+  else if(a==='logout'){logout()}
+});
+document.addEventListener('keydown',ev=>{
+  if(ev.key==='Escape'&&S.open&&!S.saving){S.open=null;S.confirmDel=false;renderDrawer();return}
+  if(ev.key==='Enter'){const r=ev.target.closest('tr[data-open],tr[data-op]');if(r){r.click()}}
+});
+document.addEventListener('change',ev=>{
+  if(ev.target.id==='f-centro'){S.centro=ev.target.value;render()}
+  if(ev.target.id==='xls'){const f=ev.target.files[0];if(f)importXls(f);ev.target.value=''}
+});
+document.addEventListener('input',ev=>{
+  if(ev.target.id==='f-q'){S.q=ev.target.value;const pos=ev.target.selectionStart;renderEquipos([...S.eq.values()],false);const el=$('#f-q');el.focus();el.setSelectionRange(pos,pos)}
+});
+document.addEventListener('submit',async ev=>{
+  ev.preventDefault();
+  if(ev.target.id==='loginform'){login();return}
+  if(ev.target.id==='eqform'){saveEquipo();return}
+  if(ev.target.id!=='opform'||S.saving)return;
+  const id=(val('op-id')||'').toUpperCase(),nombre=val('op-nombre');
+  if(!RE_OP.test(id)){S.formErr='Escribe un ID con el formato OP-01.';render();return}
+  if(!nombre){S.formErr='Escribe el nombre del operador.';render();return}
+  if(!S.opEdit&&S.ops.has(id)){S.formErr=`Ya existe el operador ${id}.`;render();return}
+  S.saving=true;
+  try{await upsert('operadores',[opRow({id_operador:id,nombre,centro:val('op-centro'),activo:val('op-activo')||'Sí'})],'id_operador');S.opEdit=null;S.formErr='';toast(`Operador ${id} guardado`);S.saving=false;await load()}
+  catch(err){S.saving=false;S.formErr=errMsg(err);render()}
+});
+/* Al volver a la pestaña, trae los cambios que hayan hecho otras personas. */
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&S.user&&!S.open&&Date.now()-S.loadedAt>30000)load()});
+
+if(!sb){
+  document.body.innerHTML='<div class="ph" style="padding:0 16px"><h2>No se pudo cargar Fundo</h2><p>Falta la conexión con el servidor. Revisa internet y recarga la página.</p></div>';
+}else{
+  sb.auth.onAuthStateChange((event,session)=>{
+    const u=session?session.user:null;
+    const changed=(u&&u.id)!==(S.user&&S.user.id);
+    S.user=u;S.authReady=true;
+    if(changed){clearData();if(u)setTimeout(load,0)}
+    showAuth();
+  });
+}
+</script>
+</body>
+</html>
