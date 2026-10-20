@@ -1,0 +1,1463 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Torre de Control Agrícola</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: barra de módulos en verde campo + espacio de trabajo con tablas operables y ficha lateral */
+:root{
+  --bg:#F2F5F1; --surface:#FFFFFF; --sunk:#E9EFE8; --fg:#18281D; --muted:#5A6B5F; --line:#DCE4DA; --line-strong:#C3D0C2;
+  --brand:#16351F; --brand-fg:#E6F0E8; --brand-muted:#93B59D; --brand-soft:#24603A;
+  --accent:#2E7346; --accent-fg:#FFFFFF; --accent-soft:#E1EEE3;
+  --ok:#2C6B42; --ok-bg:#E1EEE3; --warn:#8F5A0E; --warn-bg:#FAEFD7; --bad:#A3372A; --bad-bg:#F8E3DF; --neu:#56645A; --neu-bg:#E8ECE7;
+  --shade:rgba(16,28,20,.38);
+  /* Salas (validado: CVD y visión normal en pares vecinos, claro y oscuro) */
+  --s1:#1E8A4C; --s2:#C99A1E; --s3:#C8366B; --s4:#2F6DB5; --s5:#E07B2E; --grid:#E4EAE3;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0E1611; --surface:#15201A; --sunk:#1B2820; --fg:#E2EBE4; --muted:#98AC9D; --line:#29392E; --line-strong:#38503F;
+  --brand:#0A160E; --brand-fg:#D8E8DC; --brand-muted:#7FA28A; --brand-soft:#1F4A2D;
+  --accent:#62B47F; --accent-fg:#0A160E; --accent-soft:#1D3A26;
+  --ok:#7DC797; --ok-bg:#1D3A26; --warn:#E5B567; --warn-bg:#3A2D14; --bad:#EF8F80; --bad-bg:#3E1F1A; --neu:#A9B8AD; --neu-bg:#222F27;
+  --shade:rgba(0,0,0,.55);
+  --s1:#23874B; --s2:#BC891C; --s3:#E0558A; --s4:#5A92D8; --s5:#D9742B; --grid:#22302A;
+  color-scheme:dark }}
+:root[data-theme="dark"]{
+  --bg:#0E1611; --surface:#15201A; --sunk:#1B2820; --fg:#E2EBE4; --muted:#98AC9D; --line:#29392E; --line-strong:#38503F;
+  --brand:#0A160E; --brand-fg:#D8E8DC; --brand-muted:#7FA28A; --brand-soft:#1F4A2D;
+  --accent:#62B47F; --accent-fg:#0A160E; --accent-soft:#1D3A26;
+  --ok:#7DC797; --ok-bg:#1D3A26; --warn:#E5B567; --warn-bg:#3A2D14; --bad:#EF8F80; --bad-bg:#3E1F1A; --neu:#A9B8AD; --neu-bg:#222F27;
+  --shade:rgba(0,0,0,.55);
+  --s1:#23874B; --s2:#BC891C; --s3:#E0558A; --s4:#5A92D8; --s5:#D9742B; --grid:#22302A;
+  color-scheme:dark }
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--fg);font:14px/1.5 var(--sans);margin:0}
+button,input,select{font:inherit;color:inherit}
+.app{display:grid;grid-template-columns:216px minmax(0,1fr);min-height:100vh}
+.side{background:var(--brand);color:var(--brand-fg);position:sticky;top:0;height:100vh;display:flex;flex-direction:column;padding-left:env(safe-area-inset-left,0px)}
+.logo{display:flex;align-items:center;gap:10px;padding:22px 20px 6px;font-weight:600;font-size:20px;letter-spacing:-.01em}
+.logo svg{flex:none}
+.lname{font-size:16.5px;line-height:1.2;text-wrap:balance;min-width:0}
+.tag{padding:0 20px 18px;font-size:11.5px;color:var(--brand-muted);border-bottom:1px solid rgba(255,255,255,.08)}
+.nav{display:flex;flex-direction:column;gap:2px;padding:12px 10px}
+.navgrp{font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--brand-muted);padding:12px 12px 4px}
+.nav button{all:unset;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;border-radius:7px;color:var(--brand-fg);opacity:.78;font-size:14px}
+.nav button:hover{opacity:1;background:rgba(255,255,255,.05)}
+.nav button[aria-current="page"]{opacity:1;background:var(--brand-soft);font-weight:500}
+.nav button:focus-visible{outline:2px solid var(--brand-muted);outline-offset:1px}
+.soon{font-size:10.5px;color:var(--brand-muted)}
+.sidefoot{margin-top:auto;padding:14px 20px;font-size:11px;color:var(--brand-muted);border-top:1px solid rgba(255,255,255,.08);display:flex;flex-direction:column;gap:4px;min-width:0}
+.sidefoot .who{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.linkbtn{all:unset;cursor:pointer;text-decoration:underline;text-underline-offset:2px;align-self:flex-start}
+.linkbtn:focus-visible{outline:2px solid var(--brand-muted);outline-offset:2px}
+main{min-width:0;padding-block:24px 64px;padding-left:max(24px,env(safe-area-inset-left,0px));padding-right:max(24px,env(safe-area-inset-right,0px))}
+.head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px}
+h1{font-size:24px;font-weight:600;margin:0;letter-spacing:-.015em;text-wrap:balance}
+.sub{color:var(--muted);font-size:13px;margin-top:2px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:7px 13px;cursor:pointer;font-size:13.5px;font-weight:500}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+.btn.danger{color:var(--bad);border-color:var(--bad-bg)}
+.btn.ghost{background:transparent;border-color:transparent}
+.btn:focus-visible,.chip:focus-visible,tr[data-open]:focus-visible,tr[data-op]:focus-visible,tr[data-rec]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.btn[disabled]{opacity:.5;cursor:default}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+.summary{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin-bottom:18px}
+.summary.s4{grid-template-columns:repeat(4,minmax(0,1fr))}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;min-width:0}
+.stat b{display:block;font-family:var(--mono);font-weight:500;font-size:24px;letter-spacing:-.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stat b small{font-family:var(--sans);font-size:12px;color:var(--muted);font-weight:400;letter-spacing:0;margin-left:4px}
+.stat span{font-size:12px;color:var(--muted)}
+.stat.bad b{color:var(--bad)} .stat.warn b{color:var(--warn)}
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);margin-bottom:14px;overflow-x:auto}
+.tabs button{all:unset;cursor:pointer;padding:9px 14px;font-weight:500;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.tabs button[aria-selected="true"]{color:var(--fg);border-color:var(--accent)}
+.tabs button:focus-visible{outline:2px solid var(--accent)}
+.count{font-family:var(--mono);font-size:11.5px;color:var(--muted);margin-left:5px}
+.filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.chip{all:unset;cursor:pointer;padding:5px 11px;border-radius:999px;border:1px solid var(--line-strong);background:var(--surface);font-size:12.5px;display:inline-flex;align-items:center;gap:6px}
+.chip[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.field{padding:6px 10px;border:1px solid var(--line-strong);border-radius:8px;background:var(--surface);font-size:13px;min-width:0}
+.search{flex:1 1 200px;max-width:280px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.tablewrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;font-weight:500;color:var(--muted);font-size:11.5px;letter-spacing:.04em;text-transform:uppercase;padding:9px 12px;border-bottom:1px solid var(--line);background:var(--sunk);white-space:nowrap}
+th.num{text-align:right}
+td{padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr[data-open],tr[data-op],tr[data-rec]{cursor:pointer}
+tr[data-open]:hover td,tr[data-op]:hover td,tr[data-rec]:hover td{background:var(--sunk)}
+tfoot td{font-weight:500;background:var(--sunk)}
+.id{font-family:var(--mono);font-weight:500;font-size:12.5px;white-space:nowrap}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+.muted{color:var(--muted)}
+.clip{max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pill{display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:999px;font-size:11.5px;font-weight:500;white-space:nowrap}
+.pill::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.p-ok{background:var(--ok-bg);color:var(--ok)} .p-warn{background:var(--warn-bg);color:var(--warn)}
+.p-bad{background:var(--bad-bg);color:var(--bad)} .p-neu{background:var(--neu-bg);color:var(--neu)}
+.gap{color:var(--warn);font-size:12px;white-space:nowrap}
+.bad{color:var(--bad)}
+.empty{padding:40px 20px;text-align:center;color:var(--muted)}
+.empty strong{display:block;color:var(--fg);font-size:15px;margin-bottom:4px}
+.banner{padding:10px 14px;border-radius:9px;margin-bottom:14px;font-size:13px;background:var(--warn-bg);color:var(--warn);display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:space-between}
+.banner ul{margin:4px 0 0;padding-left:18px}
+.banner.err{background:var(--bad-bg);color:var(--bad)}
+.note{font-size:12px;color:var(--muted);margin:10px 0 0}
+.ph{max-width:520px;margin:12vh auto 0;text-align:center}
+.ph h2{font-size:20px;font-weight:600;margin:0 0 6px}
+.ph p{color:var(--muted);margin:0}
+/* paneles y gráficos */
+.two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-bottom:16px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px;min-width:0;margin-bottom:16px}
+.two .panel{margin-bottom:0}
+.panel h3{margin:0 0 10px;font-size:14px;font-weight:600}
+.period{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center}
+.periodinfo{font-size:12px;color:var(--muted);margin-top:8px}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-bottom:6px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:14px;height:3px;border-radius:2px;display:inline-block;flex:none}
+.sq{width:9px;height:9px;border-radius:2px;display:inline-block;flex:none}
+.chartwrap{position:relative;min-height:280px}
+.chartwrap svg{display:block}
+.chartwrap text{fill:var(--muted);font-size:11px;font-family:var(--sans)}
+.tip{position:absolute;pointer-events:none;background:var(--surface);border:1px solid var(--line-strong);border-radius:8px;padding:8px 10px;font-size:12px;box-shadow:0 4px 14px rgba(0,0,0,.14);min-width:170px;z-index:2}
+.tip b{display:block;margin-bottom:4px;font-weight:600}
+.tip div{display:flex;align-items:center;gap:6px}
+.tip .v{margin-left:auto;font-family:var(--mono);font-variant-numeric:tabular-nums;padding-left:12px}
+.hbars{display:flex;flex-direction:column;gap:9px}
+.hb{display:grid;grid-template-columns:104px minmax(0,1fr) 70px;align-items:center;gap:8px;font-size:12.5px}
+.hb.dim{opacity:.35}
+.hb-l{display:flex;align-items:center;gap:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hb-b{display:block;height:14px;border-radius:0 4px 4px 0;min-width:2px}
+.hb-v{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right}
+/* inicio de sesión */
+.login{min-height:100vh;display:grid;place-items:center;background:var(--brand);padding-block:24px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.lcard{width:min(380px,100%);background:var(--surface);border-radius:14px;padding:28px 26px;display:flex;flex-direction:column;gap:14px}
+.lcard .logo{padding:0;color:var(--fg)}
+.lcard h1{font-size:20px}
+.lcard .btn{width:100%;padding:9px 13px}
+.lnote{font-size:12px;color:var(--muted);margin:0}
+/* ficha */
+.shade{position:fixed;inset:0;background:var(--shade);z-index:20}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(560px,100%);background:var(--bg);z-index:21;display:flex;flex-direction:column;border-left:1px solid var(--line);
+  padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);padding-right:env(safe-area-inset-right,0px)}
+.dhead{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:16px 20px;border-bottom:1px solid var(--line);background:var(--surface)}
+.dhead h2{margin:0;font-size:17px;font-weight:600}
+.dbody{overflow-y:auto;padding:18px 20px;display:flex;flex-direction:column;gap:20px}
+.dfoot{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:14px 20px;border-top:1px solid var(--line);background:var(--surface)}
+fieldset{border:none;margin:0;padding:0;display:grid;grid-template-columns:1fr 1fr;gap:10px 12px}
+legend{font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:500;margin-bottom:8px;padding:0}
+label.f{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);min-width:0}
+label.f.wide{grid-column:1/-1}
+label.f .field{color:var(--fg);font-size:13.5px;width:100%}
+.need .field{border-color:var(--warn)}
+.calc{grid-column:1/-1;background:var(--sunk);border-radius:9px;padding:10px 12px;font-size:13px;display:flex;gap:18px;flex-wrap:wrap}
+.calc b{font-family:var(--mono);font-weight:500}
+.docrow{grid-column:1/-1;display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) minmax(0,1.1fr);gap:8px;align-items:end}
+.grid3{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.err{color:var(--bad);font-size:12.5px}
+.confirm{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px;color:var(--bad)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:9px;font-size:13px;z-index:40;max-width:calc(100% - 32px)}
+.opform{display:grid;grid-template-columns:repeat(4,minmax(0,1fr)) auto;gap:8px;align-items:end;padding:14px;border-bottom:1px solid var(--line);background:var(--sunk)}
+@media (max-width:900px){.summary{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:760px){
+  .app{grid-template-columns:minmax(0,1fr)}
+  .side{position:static;height:auto;padding-right:env(safe-area-inset-right,0px)}
+  .tag,.navgrp{display:none}
+  .sidefoot{flex-direction:row;justify-content:space-between;align-items:center;padding:8px max(16px,env(safe-area-inset-left,0px));border-top:none}
+  .logo{padding:14px max(16px,env(safe-area-inset-left,0px)) 4px}
+  .nav{flex-direction:row;overflow-x:auto;padding:6px 10px 10px}
+  .nav button{white-space:nowrap}
+  main{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:18px 48px}
+  .summary,.summary.s4{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .summary>.stat:last-child:nth-child(odd){grid-column:1/-1}
+  .two{grid-template-columns:1fr}
+  fieldset{grid-template-columns:1fr}
+  .docrow{grid-template-columns:1fr}
+  .grid3{grid-template-columns:1fr 1fr}
+  .opform{grid-template-columns:1fr 1fr}
+}
+@media (prefers-reduced-motion:no-preference){.drawer{animation:slide .18s ease-out}@keyframes slide{from{transform:translateX(24px);opacity:.6}}}
+</style>
+</head>
+<body>
+<div class="login" id="login" hidden>
+  <form class="lcard" id="loginform" novalidate>
+    <div class="logo">
+      <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><rect width="26" height="26" rx="7" fill="#2E7346"/><path d="M5 18h16M5 13.5h16M8 9h10" stroke="#E6F0E8" stroke-width="1.8" stroke-linecap="round"/></svg>
+      <span class="lname">Torre de Control Agrícola</span>
+    </div>
+    <div><h1>Entrar</h1><div class="sub">Usa el correo y la contraseña que te entregó el administrador.</div></div>
+    <label class="f">Correo<input class="field" id="l-email" type="email" autocomplete="username" required></label>
+    <label class="f">Contraseña<input class="field" id="l-pass" type="password" autocomplete="current-password" required></label>
+    <div class="err" id="l-err" role="alert" hidden></div>
+    <button class="btn primary" type="submit" id="l-btn">Entrar</button>
+    <p class="lnote">¿No tienes cuenta? Pídele al administrador que te cree un usuario.</p>
+  </form>
+</div>
+
+<div class="app" id="app" hidden>
+  <aside class="side">
+    <div class="logo">
+      <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><rect width="26" height="26" rx="7" fill="#2E7346"/><path d="M5 18h16M5 13.5h16M8 9h10" stroke="#E6F0E8" stroke-width="1.8" stroke-linecap="round"/></svg>
+      <span class="lname">Torre de Control Agrícola</span>
+    </div>
+    <div class="tag">Operaciones agrícolas</div>
+    <nav class="nav" id="nav" aria-label="Módulos"></nav>
+    <div class="sidefoot" id="sidefoot"></div>
+  </aside>
+  <main id="main"></main>
+</div>
+<div id="layer"></div>
+<div id="toast" class="toast" role="status" hidden></div>
+<input type="file" id="xls" accept=".xlsx,.xls" hidden>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+/* Conexión. La clave publicable puede ir en el navegador: lo que cada usuario puede leer o escribir lo deciden las reglas RLS. */
+const SUPABASE_URL='https://ryelugkgjcxxxebinctw.supabase.co';
+const SUPABASE_KEY='sb_publishable_578gWB25lHAmmaOl9kcNpA_ICXwofww';
+const sb=window.supabase?window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY):null;
+
+const MODS=[
+  {grp:'Lechería'},{id:'leche',label:'Leche'},{id:'rebano',label:'Rebaño'},
+  {grp:'Maquinaria'},{id:'maquinaria',label:'Equipos'},{id:'mantenciones',label:'Mantenciones'},{id:'combustible',label:'Combustible'},
+  {grp:'Infraestructura'},{id:'energia',label:'Energía',soon:true}
+];
+const PH={energia:['Energía','Consumo eléctrico por edificio y fundo. Se arma cuando estén las planillas de consumo y medidores en la carpeta del proyecto.']};
+const TIPO_ORDEN=['Tractor','Camioneta','Camión','Excavadora','Cosechadora','Carro mezclador','Pulverizador','Generador','Remolque','Implemento','Otro'];
+const ESTADOS=['Activa','En reparación','Baja','Vendida'];
+const CENTROS=['S JORGE','S SEBAST','COPIHUE','LOS MELIES','PICHI JUAN','COMPARTIDO'];
+const SALAS=CENTROS.slice(0,5);
+const SALA_VAR={'S JORGE':'--s1','S SEBAST':'--s2','COPIHUE':'--s3','LOS MELIES':'--s4','PICHI JUAN':'--s5'};
+const salaColor=s=>`var(${SALA_VAR[s]||'--muted'})`;
+const DOCS=[['perm','Permiso de circulación'],['seguro','Seguro obligatorio'],['rt','Revisión técnica']];
+const DOC_K=Object.fromEntries(DOCS.map(([k,n])=>[n,k]));
+const SITS=['Con fecha','Vencido sin fecha exacta','Vigente sin fecha','No tiene','Sin dato'];
+const SEV={'Vencido':0,'No tiene':1,'Por vencer':2,'Sin dato':3,'Vigente':4};
+const PCLS={'Vencido':'p-bad','No tiene':'p-bad','Por vencer':'p-warn','Sin dato':'p-neu','Vigente':'p-ok','Activa':'p-ok','En reparación':'p-warn','Baja':'p-neu','Vendida':'p-neu'};
+const MES=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+const EQ_COLS=['id_maquina','n_interno','nombre','tipo','marca','modelo','anio','color','patente','n_motor','n_serie','propietario','centro','uso_principal','operador_asignado','estado','intervalo_mant_horas','horometro_inicial'];
+const EQ_NUM=['n_interno','anio','intervalo_mant_horas','horometro_inicial'];
+const RE_EQ=/^[A-Z]{2}-X?[0-9]{2,}[A-Z]?$/;   // igual que la regla de la base: TR-11, CA-01B, IM-X01
+const RE_OP=/^OP-[0-9]{2,}$/;
+const ORIGENES=['Estanque fundo','Estación de servicio'];
+const SISTEMAS=['Motor','Hidráulico','Transmisión','Neumáticos','Eléctrico','Frenos','Carrocería','Otro'];
+const ESTADOS_REB=['En ordeña','Seca','Vaquilla','Ternera','Toro','Otro'];
+const PERIODOS=[['30','30 días'],['90','90 días'],['365','12 meses'],['all','Todo']];
+const PROXIMA_H=50;   // horas para marcar una preventiva como "próxima"
+
+let TIPOS=TIPO_ORDEN.slice(), SIN_HORAS=new Set(['Remolque']);
+
+const S={mod:'maquinaria',tab:'equipos',q:'',tipo:'Todos',centro:'Todos',docf:'Pendientes',
+  user:null,authReady:false,loginBusy:false,
+  eq:new Map(),docs:new Map(),ops:new Map(),plan:new Map(),loaded:false,loading:false,loadErr:'',loadedAt:0,
+  comb:[],mant:[],reb:[],control:[],leche:[],consumo:new Map(),costo:new Map(),
+  mods:{combustible:{},mantenciones:{},rebano:{},leche:{}},
+  cb:{tab:'cargas',per:'90',eq:'Todos'},mt:{tab:'intervenciones',per:'365',eq:'Todos',tipo:'Todos'},
+  rb:{tab:'ultimo',centro:'Todos'},lc:{sala:'Todos',from:'',to:''},
+  open:null,rec:null,confirmDel:false,formErr:'',warn:'',warnAck:false,opEdit:null,saving:false,importIssues:[],importKind:null};
+
+const $=s=>document.querySelector(s);
+const esc=v=>v==null?'':String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const nf=new Intl.NumberFormat('es-CL',{maximumFractionDigits:1});
+const nf0=new Intl.NumberFormat('es-CL',{maximumFractionDigits:0});
+const nf1=new Intl.NumberFormat('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1});
+const fmtN=v=>v==null||v===''||isNaN(v)?'—':nf.format(v);
+const fmt0=v=>v==null||v===''||isNaN(v)?'—':nf0.format(v);
+const fmt1=v=>v==null||v===''||isNaN(v)?'—':nf1.format(v);
+const clp=v=>v==null||isNaN(v)?'—':'$'+nf0.format(Math.round(v));
+const fmtYm=ym=>ym?MES[+ym.slice(5,7)-1]+' '+ym.slice(0,4):'—';
+const pick=(o,cols)=>Object.fromEntries(cols.map(c=>[c,o&&o[c]!==undefined?o[c]:null]));
+const isoLocal=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+const hoy=()=>isoLocal(new Date());
+const cutoff=per=>{if(per==='all')return '';const d=new Date();d.setDate(d.getDate()-(+per));return isoLocal(d)};
+const sum=(rows,f)=>rows.reduce((a,r)=>a+(r[f]==null?0:+r[f]),0);
+const mean=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:null;
+const byId=(a,b)=>String(a).localeCompare(String(b),undefined,{numeric:true});
+const today=new Date();
+
+function toast(t){const el=$('#toast');el.textContent=t;el.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>el.hidden=true,4200)}
+
+/* ---------- reglas de equipos ---------- */
+function docState(d){
+  if(!d) return 'Sin dato';
+  const s=d.situacion;
+  if(s==='Con fecha'&&d.vencimiento){
+    const [y,m]=d.vencimiento.split('-').map(Number);
+    const end=new Date(y,m,0,23,59);
+    const days=(end-today)/864e5;
+    return days<0?'Vencido':days<=60?'Por vencer':'Vigente';
+  }
+  if(s==='Vencido sin fecha exacta') return 'Vencido';
+  if(s==='Vigente sin fecha') return 'Vigente';
+  if(s==='No tiene') return 'No tiene';
+  return 'Sin dato';
+}
+const docsOf=id=>DOCS.map(([k,name])=>({k,name,d:S.docs.get(id+'__'+k)}));
+function worstDoc(id){let w='Vigente';for(const x of docsOf(id)){const st=docState(x.d);if(SEV[st]<SEV[w])w=st}return w}
+function gaps(e){
+  const g=[];
+  if(!e.centro)g.push('centro');
+  if(!e.uso_principal)g.push('uso');
+  if(!e.operador_asignado)g.push('operador');
+  if(!SIN_HORAS.has(e.tipo)){if(e.intervalo_mant_horas==null)g.push('intervalo');if(e.horometro_inicial==null)g.push('horómetro')}
+  return g;
+}
+/* Horómetro actual y próxima mantención vienen calculados de la vista v_proxima_mantencion. */
+const horoActual=e=>{const p=S.plan.get(e.id_maquina);return p&&p.horometro_actual!=null?+p.horometro_actual:e.horometro_inicial};
+function mant(e){
+  if(SIN_HORAS.has(e.tipo)) return {txt:'No aplica',cls:'muted',st:'No aplica'};
+  if(e.intervalo_mant_horas==null) return {txt:'Sin plan',cls:'muted',st:'Sin plan'};
+  const p=S.plan.get(e.id_maquina);
+  const prox=p&&p.proxima_mant_horometro!=null?+p.proxima_mant_horometro:(e.horometro_inicial!=null?e.horometro_inicial+e.intervalo_mant_horas:null);
+  if(prox==null) return {txt:'Falta horómetro',cls:'gap',st:'Falta horómetro'};
+  const rest=p&&p.horas_restantes!=null?+p.horas_restantes:null;
+  if(rest!=null&&rest<=0) return {txt:'Vencida ('+fmtN(prox)+' h)',cls:'bad',prox,rest,st:'Vencida'};
+  if(rest!=null&&rest<=PROXIMA_H) return {txt:'a las '+fmtN(prox)+' h',cls:'gap',prox,rest,st:'Próxima'};
+  return {txt:'a las '+fmtN(prox)+' h',cls:'',prox,rest,st:'Al día'};
+}
+const eqName=id=>{const e=S.eq.get(id);return e?e.nombre:''};
+const opName=id=>id&&S.ops.get(id)?S.ops.get(id).nombre:id;
+const usaHoras=id=>{const e=S.eq.get(id);return e?!SIN_HORAS.has(e.tipo):true};
+const eqList=cur=>[...S.eq.values()].filter(e=>(e.estado!=='Baja'&&e.estado!=='Vendida')||e.id_maquina===cur).sort((a,b)=>byId(a.id_maquina,b.id_maquina)).map(e=>[e.id_maquina,e.id_maquina+' · '+e.nombre]);
+const opList=cur=>[...S.ops.values()].filter(o=>o.activo!=='No'||o.id_operador===cur).sort((a,b)=>byId(a.id_operador,b.id_operador)).map(o=>[o.id_operador,o.id_operador+' · '+o.nombre]);
+/* Última lectura de horómetro conocida para un equipo hasta una fecha (cargas y mantenciones). */
+function lastReading(id,fecha,excl){
+  let best=null;
+  const see=(h,f,src)=>{if(h==null||(fecha&&f>fecha))return;h=+h;if(!best||f>best.f||(f===best.f&&h>best.h))best={h,f,src}};
+  for(const r of S.comb) if(r.id_maquina===id&&r.id_carga!==excl) see(r.horometro,r.fecha,'carga '+r.id_carga);
+  for(const r of S.mant) if(r.id_maquina===id&&r.id_intervencion!==excl) see(r.horometro,r.fecha,'mantención '+r.id_intervencion);
+  const e=S.eq.get(id);
+  if(!best&&e&&e.horometro_inicial!=null) best={h:+e.horometro_inicial,f:'',src:'horómetro inicial'};
+  return best;
+}
+
+/* ---------- sesión ---------- */
+function showAuth(){
+  const inApp=!!S.user;
+  $('#login').hidden=inApp||!S.authReady;
+  $('#app').hidden=!inApp;
+  if(inApp) render(); else if(S.authReady) setTimeout(()=>{const el=$('#l-email');if(el&&!el.value)el.focus()},0);
+}
+function loginMsg(e){
+  const m=(e&&e.message||'').toLowerCase();
+  if(m.includes('invalid login')) return 'Correo o contraseña incorrectos.';
+  if(m.includes('email not confirmed')) return 'Tu correo aún no está confirmado. Pídele al administrador que lo confirme en Supabase.';
+  if(m.includes('fetch')||m.includes('network')) return 'No hay conexión con el servidor. Revisa internet e inténtalo de nuevo.';
+  return 'No se pudo iniciar sesión: '+(e&&e.message||'error desconocido')+'.';
+}
+async function login(){
+  const email=$('#l-email').value.trim(), password=$('#l-pass').value;
+  const err=$('#l-err');
+  if(!email||!password){err.textContent='Escribe tu correo y tu contraseña.';err.hidden=false;return}
+  S.loginBusy=true;$('#l-btn').disabled=true;$('#l-btn').textContent='Entrando…';err.hidden=true;
+  const {error}=await sb.auth.signInWithPassword({email,password});
+  S.loginBusy=false;$('#l-btn').disabled=false;$('#l-btn').textContent='Entrar';
+  if(error){err.textContent=loginMsg(error);err.hidden=false}
+  else $('#l-pass').value='';
+}
+async function logout(){await sb.auth.signOut();toast('Sesión cerrada')}
+
+/* ---------- datos ---------- */
+/* Supabase entrega como máximo 1.000 filas por consulta: se pide por páginas. */
+async function fetchAll(table,select,order){
+  const out=[],step=1000;
+  for(let from=0;;from+=step){
+    let q=sb.from(table).select(select).range(from,from+step-1);
+    for(const o of order) q=q.order(o,{ascending:true});
+    const {data,error}=await q;
+    if(error) throw error;
+    out.push(...data);
+    if(data.length<step) break;
+  }
+  return out;
+}
+async function load(){
+  if(S.loading) return;
+  S.loading=true;
+  const [eq,dc,op,tp,pm]=await Promise.all([
+    sb.from('equipos').select(EQ_COLS.join(',')),
+    sb.from('documentos').select('id_maquina,documento,vencimiento,situacion,texto_original'),
+    sb.from('operadores').select('id_operador,nombre,centro,activo'),
+    sb.from('tipos_equipo').select('tipo,usa_horometro'),
+    sb.from('v_proxima_mantencion').select('id_maquina,horometro_actual,proxima_mant_horometro,horas_restantes,estado_plan,horometro_ultima_preventiva,fecha_ultima_preventiva')
+  ]);
+  S.loading=false;
+  const bad=[eq,dc,op,tp,pm].find(r=>r.error);
+  if(bad){S.loadErr=errMsg(bad.error);if(isAuthErr(bad.error)){await sb.auth.signOut();return}render();return}
+  S.loadErr='';S.loaded=true;S.loadedAt=Date.now();
+  const tipos=tp.data.map(t=>t.tipo);
+  TIPOS=[...TIPO_ORDEN.filter(t=>tipos.includes(t)),...tipos.filter(t=>!TIPO_ORDEN.includes(t))];
+  SIN_HORAS=new Set(tp.data.filter(t=>!t.usa_horometro).map(t=>t.tipo));
+  S.eq=new Map(eq.data.map(e=>[e.id_maquina,e]));
+  S.docs=new Map(dc.data.filter(d=>DOC_K[d.documento]).map(d=>[d.id_maquina+'__'+DOC_K[d.documento],{...d,vencimiento:d.vencimiento?d.vencimiento.slice(0,7):null}]));
+  S.ops=new Map(op.data.map(o=>[o.id_operador,{...o,activo:o.activo?'Sí':'No'}]));
+  S.plan=new Map(pm.data.map(p=>[p.id_maquina,p]));
+  render();
+}
+/* Carga de cada módulo de registros, al abrirlo por primera vez. */
+const MOD_LOAD={
+  combustible:async()=>{
+    const [rows,cons,cost]=await Promise.all([
+      fetchAll('combustible','*',['fecha','id_carga']),
+      fetchAll('v_consumo_maquina','*',['id_maquina']),
+      fetchAll('v_costo_maquina','*',['id_maquina'])]);
+    S.comb=rows;S.consumo=new Map(cons.map(r=>[r.id_maquina,r]));S.costo=new Map(cost.map(r=>[r.id_maquina,r]));
+  },
+  mantenciones:async()=>{S.mant=await fetchAll('mantenciones','*',['fecha','id_intervencion'])},
+  rebano:async()=>{
+    const [r,c]=await Promise.all([fetchAll('rebano','*',['fecha','centro','lote','estado']),fetchAll('v_rebano_vs_leche','*',['fecha','centro'])]);
+    S.reb=r;S.control=c;
+  },
+  leche:async()=>{S.leche=await fetchAll('leche','fecha,sala,vo,l_planta,l_descarte,conc_kg',['fecha','sala'])}
+};
+async function loadMod(m){
+  const st=S.mods[m];
+  if(st.loading) return;
+  st.loading=true;st.err='';
+  try{await MOD_LOAD[m]();st.loaded=true;st.at=Date.now()}
+  catch(e){st.err=errMsg(e);if(isAuthErr(e)){st.loading=false;await sb.auth.signOut();return}}
+  st.loading=false;render();
+}
+const ensure=(...ms)=>{for(const m of ms){const st=S.mods[m];if(!st.loaded&&!st.loading&&!st.err)loadMod(m)}};
+const ready=(...ms)=>S.loaded&&ms.every(m=>S.mods[m].loaded);
+function clearData(){
+  S.eq=new Map();S.docs=new Map();S.ops=new Map();S.plan=new Map();S.loaded=false;S.open=null;S.rec=null;S.opEdit=null;S.importIssues=[];
+  S.comb=[];S.mant=[];S.reb=[];S.control=[];S.leche=[];S.consumo=new Map();S.costo=new Map();
+  for(const m in S.mods) S.mods[m]={};
+}
+const isAuthErr=e=>e&&(e.code==='PGRST301'||e.code==='PGRST303'||/jwt/i.test(e.message||''));
+/* Filas tal como las guarda la base. */
+const eqRow=e=>pick(e,EQ_COLS);
+const docRow=d=>({id_maquina:d.id_maquina,documento:d.documento,situacion:d.situacion,vencimiento:d.vencimiento?d.vencimiento+'-01':null,texto_original:d.texto_original??null});
+const opRow=o=>({id_operador:o.id_operador,nombre:o.nombre,centro:o.centro||null,activo:o.activo!=='No'});
+async function upsert(table,rows,onConflict){
+  for(let i=0;i<rows.length;i+=500){
+    const {error}=await sb.from(table).upsert(rows.slice(i,i+500),{onConflict});
+    if(error) throw error;
+  }
+}
+const must=async q=>{const {error}=await q;if(error)throw error};
+function errMsg(e){
+  if(!e) return 'No se pudo guardar. Inténtalo de nuevo.';
+  if(isAuthErr(e)) return 'Tu sesión expiró. Vuelve a iniciar sesión.';
+  if(e.code==='42501') return 'No tienes permiso para hacer este cambio.';
+  if(e.code==='23505') return 'Ya existe un registro con esa clave.';
+  if(e.code==='23503') return /operador/i.test(e.message||'')?'El operador indicado no existe. Agrégalo primero en Equipos › Operadores.':'Falta un dato relacionado: revisa que el equipo, el operador y el centro existan.';
+  if(e.code==='23514') return 'Hay un valor fuera de formato o de rango. Revisa los números y los campos obligatorios.';
+  if(/fetch|network/i.test(e.message||'')) return 'No hay conexión con la base de datos. Revisa internet e inténtalo de nuevo.';
+  return 'No se pudo guardar: '+(e.message||'error desconocido')+'.';
+}
+
+/* ---------- piezas comunes de la interfaz ---------- */
+const stat=(v,label,cls='')=>`<div class="stat ${cls}"><b>${v}</b><span>${label}</span></div>`;
+const tabsHtml=(obj,list)=>`<div class="tabs" role="tablist">${list.map(([k,l,c])=>`<button role="tab" data-set="${obj}.tab" data-val="${k}" aria-selected="${S[obj].tab===k}">${l}${c!=null?`<span class="count">${c}</span>`:''}</button>`).join('')}</div>`;
+const perChips=obj=>PERIODOS.map(([k,l])=>`<button class="chip" data-set="${obj}.per" data-val="${k}" aria-pressed="${S[obj].per===k}">${l}</button>`).join('');
+const selSet=(path,label,opts,cur)=>`<select class="field" data-set="${path}" aria-label="${label}">${opts.map(o=>{const [k,l]=Array.isArray(o)?o:[o,o];return `<option value="${esc(k)}" ${cur===k?'selected':''}>${esc(l)}</option>`}).join('')}</select>`;
+function modBanners(...ms){
+  let h='';
+  if(S.loadErr) h+=`<div class="banner err">${esc(S.loadErr)} <button class="btn" data-act="reload">Reintentar</button></div>`;
+  for(const m of ms){const e=S.mods[m].err;if(e)h+=`<div class="banner err">${esc(e)} <button class="btn" data-act="reload-mod" data-kind="${m}">Reintentar</button></div>`}
+  if(S.importIssues.length&&S.importKind===S.mod) h+=`<div class="banner"><div><b>Filas que no se importaron (${S.importIssues.length})</b><ul>${S.importIssues.slice(0,8).map(i=>`<li>${esc(i)}</li>`).join('')}${S.importIssues.length>8?`<li>y ${S.importIssues.length-8} más</li>`:''}</ul></div><button class="btn ghost" data-act="issues-close">Cerrar</button></div>`;
+  return h;
+}
+const head=(t,sub,acts)=>`<div class="head"><div><h1>${t}</h1><div class="sub">${sub}</div></div><div class="actions">${acts}</div></div>`;
+const loadingBox=t=>`<div class="card"><div class="empty">${t}</div></div>`;
+
+/* ---------- render ---------- */
+function renderNav(){
+  $('#nav').innerHTML=MODS.map(m=>m.grp?`<div class="navgrp">${m.grp}</div>`:
+    `<button data-mod="${m.id}" ${S.mod===m.id?'aria-current="page"':''}>${m.label}${m.soon?'<span class="soon">pronto</span>':''}</button>`).join('');
+  $('#sidefoot').innerHTML=`<span class="who" title="${esc(S.user?.email)}">${esc(S.user?.email||'')}</span><button class="linkbtn" data-act="logout">Cerrar sesión</button>`;
+}
+function render(){
+  if(!S.user) return;
+  renderNav();
+  const m=$('#main');
+  if(S.mod==='maquinaria') renderMaquinaria();
+  else if(S.mod==='combustible'){ensure('combustible','mantenciones');renderComb()}
+  else if(S.mod==='mantenciones'){ensure('mantenciones','combustible');renderMant()}
+  else if(S.mod==='rebano'){ensure('rebano');renderReb()}
+  else if(S.mod==='leche'){ensure('leche');renderLeche()}
+  else {const [t,p]=PH[S.mod];m.innerHTML=`<div class="ph"><h2>${t}</h2><p>${p}</p></div>`}
+  renderDrawer();
+}
+
+/* ================= Equipos ================= */
+function renderMaquinaria(){
+  const m=$('#main');
+  const eqs=[...S.eq.values()];
+  const active=eqs.filter(e=>e.estado!=='Baja'&&e.estado!=='Vendida');
+  const rep=eqs.filter(e=>e.estado==='En reparación').length;
+  const vencidos=eqs.filter(e=>SEV[worstDoc(e.id_maquina)]<=1).length;
+  const porvencer=eqs.filter(e=>worstDoc(e.id_maquina)==='Por vencer').length;
+  const incompletas=active.filter(e=>gaps(e).length).length;
+  const loading=!S.loaded&&!S.loadErr;
+  const off=!S.loaded;
+  const tabs=[['equipos','Equipos',eqs.length],['documentos','Documentos',null],['operadores','Operadores',S.ops.size]];
+  const L=v=>loading?'…':v;
+  m.innerHTML=`
+  ${head('Equipos','Ficha, estado y documentación de la maquinaria de los fundos',`
+      <button class="btn" data-act="import" data-kind="maquinaria" ${off?'disabled':''}>Importar Excel</button>
+      <button class="btn primary" data-act="new" ${off?'disabled':''}>Nuevo equipo</button>`)}
+  ${modBanners()}
+  <div class="summary">
+    ${stat(L(active.length),'Equipos activos')}
+    ${stat(L(rep),'En reparación',rep?'warn':'')}
+    ${stat(L(vencidos),'Con documentos vencidos o sin tener',vencidos?'bad':'')}
+    ${stat(L(porvencer),'Documentos por vencer (60 días)',porvencer?'warn':'')}
+    ${stat(L(incompletas),'Fichas incompletas',incompletas?'warn':'')}
+  </div>
+  <div class="tabs" role="tablist">${tabs.map(([k,l,c])=>`<button role="tab" data-tab="${k}" aria-selected="${S.tab===k}">${l}${c!=null?`<span class="count">${c}</span>`:''}</button>`).join('')}</div>
+  <div id="pane"></div>`;
+  if(S.tab==='equipos') renderEquipos(eqs,loading);
+  else if(S.tab==='documentos') renderDocumentos(eqs,loading);
+  else renderOperadores();
+}
+function renderEquipos(eqs,loading){
+  const tiposPresentes=['Todos',...TIPOS.filter(t=>eqs.some(e=>e.tipo===t))];
+  const q=S.q.trim().toLowerCase();
+  const rows=eqs.filter(e=>(S.tipo==='Todos'||e.tipo===S.tipo)&&(S.centro==='Todos'||(S.centro==='Sin centro'?!e.centro:e.centro===S.centro))
+    &&(!q||[e.id_maquina,e.nombre,e.marca,e.modelo,e.patente,e.propietario].some(v=>v&&String(v).toLowerCase().includes(q))))
+    .sort((a,b)=>(TIPOS.indexOf(a.tipo)-TIPOS.indexOf(b.tipo))||byId(a.id_maquina,b.id_maquina));
+  $('#pane').innerHTML=`
+  <div class="filters">
+    ${tiposPresentes.map(t=>`<button class="chip" data-tipo="${esc(t)}" aria-pressed="${S.tipo===t}">${esc(t)}</button>`).join('')}
+    <select class="field" id="f-centro" aria-label="Centro">${['Todos','Sin centro',...CENTROS].map(c=>`<option ${S.centro===c?'selected':''}>${c}</option>`).join('')}</select>
+    <input class="field search" id="f-q" placeholder="Buscar nombre, patente, marca…" value="${esc(S.q)}" aria-label="Buscar">
+  </div>
+  <div class="card"><div class="tablewrap">
+  ${loading?'<div class="empty">Cargando equipos…</div>':!eqs.length?`<div class="empty"><strong>Aún no hay equipos</strong>Importa el Excel de maquinaria o crea el primer equipo con “Nuevo equipo”.</div>`:!rows.length?'<div class="empty">Ningún equipo coincide con los filtros.</div>':`
+  <table><thead><tr><th>ID</th><th>Equipo</th><th>Tipo</th><th>Centro</th><th>Operador</th><th>Estado</th><th class="num">Horómetro</th><th>Próx. mantención</th><th>Documentos</th><th>Ficha</th></tr></thead><tbody>
+  ${rows.map(e=>{const g=gaps(e),mt=mant(e),wd=worstDoc(e.id_maquina);return `<tr data-open="${esc(e.id_maquina)}" tabindex="0">
+    <td class="id">${esc(e.id_maquina)}</td>
+    <td><div>${esc(e.nombre)}</div><div class="muted" style="font-size:12px">${esc([e.marca,e.modelo,e.patente].filter(Boolean).join(' · '))}</div></td>
+    <td>${esc(e.tipo)}</td><td>${e.centro?esc(e.centro):'<span class="gap">Sin centro</span>'}</td>
+    <td>${e.operador_asignado?esc(opName(e.operador_asignado)):'<span class="muted">—</span>'}</td>
+    <td><span class="pill ${PCLS[e.estado]||'p-neu'}">${esc(e.estado||'—')}</span></td>
+    <td class="num">${SIN_HORAS.has(e.tipo)?'<span class="muted">—</span>':fmtN(horoActual(e))}</td>
+    <td class="${mt.cls}">${mt.txt}</td>
+    <td><span class="pill ${PCLS[wd]}">${wd}</span></td>
+    <td>${g.length?`<span class="gap">Falta ${g.length}</span>`:'<span class="pill p-ok">Completa</span>'}</td></tr>`}).join('')}
+  </tbody></table>`}
+  </div></div>`;
+}
+function renderDocumentos(eqs,loading){
+  const list=[];
+  for(const e of eqs) for(const x of docsOf(e.id_maquina)) list.push({e,...x,st:docState(x.d)});
+  const groups=['Pendientes','Vencido','No tiene','Por vencer','Sin dato','Vigente','Todos'];
+  const f=S.docf;
+  const rows=list.filter(r=>f==='Todos'||(f==='Pendientes'?SEV[r.st]<=2:r.st===f))
+    .sort((a,b)=>SEV[a.st]-SEV[b.st]||(a.d?.vencimiento||'9').localeCompare(b.d?.vencimiento||'9')||byId(a.e.id_maquina,b.e.id_maquina));
+  const cnt=g=>list.filter(r=>g==='Todos'||(g==='Pendientes'?SEV[r.st]<=2:r.st===g)).length;
+  $('#pane').innerHTML=`
+  <div class="filters">${groups.map(g=>`<button class="chip" data-docf="${g}" aria-pressed="${f===g}">${g} <span class="count">${cnt(g)}</span></button>`).join('')}</div>
+  <div class="card"><div class="tablewrap">
+  ${loading?'<div class="empty">Cargando documentos…</div>':!rows.length?'<div class="empty">No hay documentos en este grupo.</div>':`
+  <table><thead><tr><th>Equipo</th><th>Documento</th><th>Vencimiento</th><th>Estado</th><th>Dato original</th></tr></thead><tbody>
+  ${rows.map(r=>`<tr data-open="${esc(r.e.id_maquina)}" tabindex="0"><td><span class="id">${esc(r.e.id_maquina)}</span> <span class="muted">${esc(r.e.nombre)}</span></td>
+    <td>${r.name}</td><td class="num" style="text-align:left">${fmtYm(r.d?.vencimiento)}</td>
+    <td><span class="pill ${PCLS[r.st]}">${r.st}</span></td><td class="muted">${esc(r.d?.texto_original||'')}</td></tr>`).join('')}
+  </tbody></table>`}
+  </div></div>
+  <p class="note">Un documento con mes de vencimiento se considera vigente hasta el último día de ese mes. “Por vencer” = vence en los próximos 60 días.</p>`;
+}
+function renderOperadores(){
+  const ops=[...S.ops.values()].sort((a,b)=>byId(a.id_operador,b.id_operador));
+  const ed=S.opEdit;
+  const asign=id=>[...S.eq.values()].filter(e=>e.operador_asignado===id).map(e=>e.id_maquina);
+  $('#pane').innerHTML=`<div class="card">
+  <form class="opform" id="opform" novalidate>
+    <label class="f">ID<input class="field" id="op-id" required placeholder="OP-01" value="${esc(ed?.id_operador||'')}" ${ed?'readonly':''}></label>
+    <label class="f">Nombre<input class="field" id="op-nombre" required value="${esc(ed?.nombre||'')}"></label>
+    <label class="f">Centro<select class="field" id="op-centro"><option value="">—</option>${CENTROS.map(c=>`<option ${ed?.centro===c?'selected':''}>${c}</option>`).join('')}</select></label>
+    <label class="f">Activo<select class="field" id="op-activo">${['Sí','No'].map(v=>`<option ${(ed?.activo||'Sí')===v?'selected':''}>${v}</option>`).join('')}</select></label>
+    <div class="actions"><button class="btn primary" type="submit" ${!S.loaded||S.saving?'disabled':''}>${ed?'Guardar':'Agregar'}</button>${ed?'<button class="btn ghost" type="button" data-act="op-cancel">Cancelar</button>':''}</div>
+    <div class="err" id="op-err" style="grid-column:1/-1" ${S.formErr&&!S.open&&!S.rec?'':'hidden'}>${esc(S.formErr)}</div>
+  </form>
+  <div class="tablewrap">${!ops.length?`<div class="empty"><strong>Aún no hay operadores</strong>Agrégalos arriba. Después podrás asignarlos a cada equipo y registrarlos en cada carga de combustible.</div>`:`
+  <table><thead><tr><th>ID</th><th>Nombre</th><th>Centro</th><th>Activo</th><th>Equipos asignados</th></tr></thead><tbody>
+  ${ops.map(o=>`<tr data-op="${esc(o.id_operador)}" tabindex="0"><td class="id">${esc(o.id_operador)}</td><td>${esc(o.nombre)}</td><td>${esc(o.centro||'—')}</td><td>${esc(o.activo)}</td><td class="id muted">${asign(o.id_operador).join(', ')||'—'}</td></tr>`).join('')}
+  </tbody></table>`}</div></div>`;
+}
+
+/* ================= Combustible ================= */
+function renderComb(){
+  const st=S.mods.combustible, ok=ready('combustible');
+  const c=cutoff(S.cb.per), fe=S.cb.eq;
+  const rows=S.comb.filter(r=>(!c||r.fecha>=c)&&(fe==='Todos'||r.id_maquina===fe));
+  const litros=sum(rows,'litros');
+  const conPrecio=rows.filter(r=>r.precio_litro!=null);
+  const costo=conPrecio.reduce((a,r)=>a+(+r.litros)*(+r.precio_litro),0);
+  const sinPrecio=rows.length-conPrecio.length;
+  const cons=fe==='Todos'?[...S.consumo.values()]:[S.consumo.get(fe)].filter(Boolean);
+  const hh=sum(cons.filter(r=>+r.horas>0),'horas'), ll=sum(cons.filter(r=>+r.horas>0),'litros');
+  const lh=hh>0?ll/hh:null;
+  const L=v=>ok?v:'…';
+  const eqOpts=[['Todos','Todos los equipos'],...eqList(fe==='Todos'?null:fe)];
+  $('#main').innerHTML=`
+  ${head('Combustible','Cargas por equipo y operador, con horómetro, consumo en litros por hora y costo',`
+    <button class="btn" data-act="import" data-kind="combustible" ${ok?'':'disabled'}>Importar Excel</button>
+    <button class="btn primary" data-act="rec-new" data-kind="comb" ${ok?'':'disabled'}>Nueva carga</button>`)}
+  ${modBanners('combustible','mantenciones')}
+  <div class="filters">${perChips('cb')} ${selSet('cb.eq','Equipo',eqOpts,fe)}</div>
+  <div class="summary s4">
+    ${stat(L(fmt0(litros))+'<small>L</small>','Litros cargados en el período')}
+    ${stat(L(clp(costo)),sinPrecio?`Costo del período · ${sinPrecio} carga${sinPrecio>1?'s':''} sin precio`:'Costo del período',sinPrecio?'warn':'')}
+    ${stat(L(fmt0(rows.length)),'Cargas en el período')}
+    ${stat(L(lh==null?'—':fmt1(lh))+'<small>L/h</small>',fe==='Todos'?'Consumo promedio de la flota (histórico)':'Consumo promedio del equipo (histórico)')}
+  </div>
+  ${tabsHtml('cb',[['cargas','Cargas',rows.length],['consumo','Consumo y costo por equipo',null]])}
+  <div id="pane"></div>`;
+  if(!ok){$('#pane').innerHTML=loadingBox(st.err?'No se pudieron cargar las cargas.':'Cargando cargas de combustible…');return}
+  if(S.cb.tab==='cargas'){
+    const list=rows.slice().sort((a,b)=>b.fecha.localeCompare(a.fecha)||byId(b.id_carga,a.id_carga));
+    $('#pane').innerHTML=`<div class="card"><div class="tablewrap">${!list.length?`<div class="empty"><strong>${S.comb.length?'No hay cargas en este período':'Aún no hay cargas de combustible'}</strong>${S.comb.length?'Cambia el período o el equipo.':'Registra la primera con “Nueva carga” o importa la plantilla de combustible.'}</div>`:`
+    <table><thead><tr><th>Fecha</th><th>ID</th><th>Equipo</th><th>Operador</th><th class="num">Litros</th><th class="num">Horómetro</th><th>Lleno</th><th>Origen</th><th class="num">$/L</th><th class="num">Total</th></tr></thead><tbody>
+    ${list.map(r=>`<tr data-rec="comb" data-key="${esc(r.id_carga)}" tabindex="0">
+      <td class="num" style="text-align:left">${esc(r.fecha)}</td><td class="id">${esc(r.id_carga)}</td>
+      <td><span class="id">${esc(r.id_maquina)}</span> <span class="muted">${esc(eqName(r.id_maquina))}</span></td>
+      <td>${esc(opName(r.id_operador))}</td><td class="num">${fmt1(r.litros)}</td>
+      <td class="num">${r.horometro==null?(usaHoras(r.id_maquina)?'<span class="gap">Falta</span>':'—'):fmtN(r.horometro)}</td>
+      <td>${r.estanque_lleno?'Sí':'No'}</td><td>${esc(r.origen||'—')}</td>
+      <td class="num">${r.precio_litro==null?'—':clp(r.precio_litro)}</td>
+      <td class="num">${r.precio_litro==null?'—':clp(r.litros*r.precio_litro)}</td></tr>`).join('')}
+    </tbody><tfoot><tr><td colspan="4">Total del período</td><td class="num">${fmt1(litros)}</td><td colspan="4"></td><td class="num">${clp(costo)}</td></tr></tfoot></table>`}</div></div>`;
+  }else{
+    const ids=new Set([...S.comb.map(r=>r.id_maquina),...S.mant.map(r=>r.id_maquina)]);
+    const lit=new Map();for(const r of S.comb) lit.set(r.id_maquina,(lit.get(r.id_maquina)||0)+(+r.litros));
+    const list=[...ids].filter(id=>fe==='Todos'||id===fe).map(id=>{const k=S.consumo.get(id)||{},co=S.costo.get(id)||{};return {id,litros:lit.get(id)||0,horas:k.horas,lh:k.litros_hora,comb:+co.costo_combustible||0,mant:+co.costo_mantenciones||0,tot:+co.costo_total||0,sin:+co.litros_sin_precio||0}})
+      .sort((a,b)=>b.tot-a.tot||byId(a.id,b.id));
+    $('#pane').innerHTML=`<div class="card"><div class="tablewrap">${!list.length?'<div class="empty"><strong>Sin datos todavía</strong>Aparecerán aquí los equipos con cargas de combustible o mantenciones.</div>':`
+    <table><thead><tr><th>Equipo</th><th class="num">Litros cargados</th><th class="num">Horas medidas</th><th class="num">L/h</th><th class="num">Combustible</th><th class="num">Mantenciones</th><th class="num">Costo total</th></tr></thead><tbody>
+    ${list.map(r=>`<tr><td><span class="id">${esc(r.id)}</span> <span class="muted">${esc(eqName(r.id))}</span></td>
+      <td class="num">${fmt0(r.litros)}</td><td class="num">${r.horas==null?'—':fmtN(r.horas)}</td><td class="num">${r.lh==null?'—':fmt1(r.lh)}</td>
+      <td class="num">${clp(r.comb)}${r.sin?` <span class="gap" title="${fmt0(r.sin)} L sin precio">*</span>`:''}</td><td class="num">${clp(r.mant)}</td><td class="num"><b>${clp(r.tot)}</b></td></tr>`).join('')}
+    </tbody></table>`}</div></div>
+    <p class="note">Todo el historial. L/h se calcula entre dos cargas con estanque lleno (método lleno/lleno). * = hay litros sin precio, que no suman al costo.</p>`;
+  }
+}
+
+/* ================= Mantenciones ================= */
+function planRows(){
+  const order={'Vencida':0,'Próxima':1,'Falta horómetro':2,'Al día':3,'Sin plan':4};
+  return [...S.eq.values()].filter(e=>!SIN_HORAS.has(e.tipo)&&e.estado!=='Baja'&&e.estado!=='Vendida')
+    .map(e=>({e,p:S.plan.get(e.id_maquina)||{},m:mant(e)}))
+    .sort((a,b)=>order[a.m.st]-order[b.m.st]||(a.m.rest??1e9)-(b.m.rest??1e9)||byId(a.e.id_maquina,b.e.id_maquina));
+}
+function renderMant(){
+  const st=S.mods.mantenciones, ok=ready('mantenciones','combustible');
+  const c=cutoff(S.mt.per), fe=S.mt.eq, ft=S.mt.tipo;
+  const rows=S.mant.filter(r=>(!c||r.fecha>=c)&&(fe==='Todos'||r.id_maquina===fe)&&(ft==='Todos'||r.tipo===ft));
+  const costo=rows.reduce((a,r)=>a+(+r.costo_repuestos||0)+(+r.costo_mano_obra||0),0);
+  const prev=rows.filter(r=>r.tipo==='Preventiva').length;
+  const dias=sum(rows,'dias_fuera_servicio');
+  const pr=planRows();
+  const venc=pr.filter(x=>x.m.st==='Vencida').length, prox=pr.filter(x=>x.m.st==='Próxima').length;
+  const L=v=>ok?v:'…';
+  const eqOpts=[['Todos','Todos los equipos'],...eqList(fe==='Todos'?null:fe)];
+  $('#main').innerHTML=`
+  ${head('Mantenciones','Intervenciones preventivas y correctivas por equipo. La próxima preventiva se calcula por horas.',`
+    <button class="btn" data-act="import" data-kind="mantenciones" ${ok?'':'disabled'}>Importar Excel</button>
+    <button class="btn primary" data-act="rec-new" data-kind="mant" ${ok?'':'disabled'}>Nueva intervención</button>`)}
+  ${modBanners('mantenciones','combustible')}
+  <div class="filters">${perChips('mt')} ${selSet('mt.eq','Equipo',eqOpts,fe)} ${selSet('mt.tipo','Tipo',[['Todos','Preventivas y correctivas'],'Preventiva','Correctiva'],ft)}</div>
+  <div class="summary s4">
+    ${stat(L(clp(costo)),'Costo del período')}
+    ${stat(L(fmt0(rows.length)),`Intervenciones · ${prev} preventiva${prev===1?'':'s'}, ${rows.length-prev} correctiva${rows.length-prev===1?'':'s'}`)}
+    ${stat(L(fmtN(dias))+'<small>días</small>','Fuera de servicio en el período',dias?'warn':'')}
+    ${stat(L(venc),`Preventivas vencidas · ${prox} próxima${prox===1?'':'s'} (≤ ${PROXIMA_H} h)`,venc?'bad':prox?'warn':'')}
+  </div>
+  ${tabsHtml('mt',[['intervenciones','Intervenciones',rows.length],['plan','Plan por horas',pr.length]])}
+  <div id="pane"></div>`;
+  if(!ok){$('#pane').innerHTML=loadingBox(st.err?'No se pudieron cargar las mantenciones.':'Cargando mantenciones…');return}
+  if(S.mt.tab==='intervenciones'){
+    const list=rows.slice().sort((a,b)=>b.fecha.localeCompare(a.fecha)||byId(b.id_intervencion,a.id_intervencion));
+    $('#pane').innerHTML=`<div class="card"><div class="tablewrap">${!list.length?`<div class="empty"><strong>${S.mant.length?'No hay intervenciones con estos filtros':'Aún no hay mantenciones registradas'}</strong>${S.mant.length?'Cambia el período, el equipo o el tipo.':'Registra la primera con “Nueva intervención” o importa la plantilla de mantenciones.'}</div>`:`
+    <table><thead><tr><th>Fecha</th><th>ID</th><th>Equipo</th><th>Tipo</th><th>Sistema</th><th>Descripción</th><th class="num">Horómetro</th><th class="num">Repuestos</th><th class="num">Mano de obra</th><th class="num">Total</th><th>Taller</th><th class="num">Días fuera</th></tr></thead><tbody>
+    ${list.map(r=>`<tr data-rec="mant" data-key="${esc(r.id_intervencion)}" tabindex="0">
+      <td class="num" style="text-align:left">${esc(r.fecha)}</td><td class="id">${esc(r.id_intervencion)}</td>
+      <td><span class="id">${esc(r.id_maquina)}</span> <span class="muted">${esc(eqName(r.id_maquina))}</span></td>
+      <td><span class="pill ${r.tipo==='Preventiva'?'p-ok':'p-warn'}">${esc(r.tipo)}</span></td><td>${esc(r.sistema||'—')}</td>
+      <td class="clip" title="${esc(r.descripcion)}">${esc(r.descripcion||'—')}</td>
+      <td class="num">${fmtN(r.horometro)}</td><td class="num">${clp(r.costo_repuestos)}</td><td class="num">${clp(r.costo_mano_obra)}</td>
+      <td class="num">${clp((+r.costo_repuestos||0)+(+r.costo_mano_obra||0))}</td>
+      <td>${esc([r.tipo_taller,r.proveedor].filter(Boolean).join(' · ')||'—')}</td><td class="num">${fmtN(r.dias_fuera_servicio)}</td></tr>`).join('')}
+    </tbody><tfoot><tr><td colspan="9">Total del período</td><td class="num">${clp(costo)}</td><td></td><td class="num">${fmtN(dias)}</td></tr></tfoot></table>`}</div></div>`;
+  }else{
+    const pcls={'Vencida':'p-bad','Próxima':'p-warn','Falta horómetro':'p-warn','Al día':'p-ok','Sin plan':'p-neu'};
+    $('#pane').innerHTML=`<div class="card"><div class="tablewrap">
+    <table><thead><tr><th>Equipo</th><th class="num">Intervalo</th><th>Última preventiva</th><th class="num">Horómetro actual</th><th class="num">Próxima a las</th><th class="num">Faltan</th><th>Estado</th></tr></thead><tbody>
+    ${pr.map(({e,p,m})=>`<tr data-open="${esc(e.id_maquina)}" tabindex="0"><td><span class="id">${esc(e.id_maquina)}</span> <span class="muted">${esc(e.nombre)}</span></td>
+      <td class="num">${e.intervalo_mant_horas==null?'—':fmt0(e.intervalo_mant_horas)+' h'}</td>
+      <td>${p.fecha_ultima_preventiva?esc(p.fecha_ultima_preventiva)+' · '+fmtN(p.horometro_ultima_preventiva)+' h':'<span class="muted">Sin registro</span>'}</td>
+      <td class="num">${fmtN(horoActual(e))}</td><td class="num">${m.prox==null?'—':fmtN(m.prox)+' h'}</td>
+      <td class="num">${m.rest==null?'—':fmtN(m.rest)+' h'}</td><td><span class="pill ${pcls[m.st]}">${m.st}</span></td></tr>`).join('')}
+    </tbody></table></div></div>
+    <p class="note">Próxima = horómetro de la última preventiva (o el inicial) + intervalo. “Próxima” = faltan ${PROXIMA_H} h o menos. Abre un equipo para completar su intervalo u horómetro inicial.</p>`;
+  }
+}
+
+/* ================= Rebaño ================= */
+function rebGroups(){
+  const g=new Map();
+  for(const r of S.reb){
+    const k=r.fecha+'|'+r.centro+'|'+r.lote;
+    const x=g.get(k)||{key:k,fecha:r.fecha,centro:r.centro,lote:r.lote,counts:{},obs:new Set()};
+    x.counts[r.estado]=+r.cantidad; if(r.observacion) x.obs.add(r.observacion);
+    g.set(k,x);
+  }
+  return [...g.values()];
+}
+const cntRow=c=>ESTADOS_REB.map(e=>`<td class="num">${c[e]==null?'<span class="muted">—</span>':fmt0(c[e])}</td>`).join('');
+const cntTot=c=>ESTADOS_REB.reduce((a,e)=>a+(c[e]||0),0);
+function renderReb(){
+  const st=S.mods.rebano, ok=S.mods.rebano.loaded;
+  const fc=S.rb.centro;
+  const groups=rebGroups().filter(g=>fc==='Todos'||g.centro===fc);
+  /* último conteo de cada centro */
+  const last=new Map();
+  for(const g of groups){const l=last.get(g.centro);if(!l||g.fecha>l.fecha)last.set(g.centro,{fecha:g.fecha,counts:{},lotes:0})}
+  for(const g of groups){const l=last.get(g.centro);if(l.fecha===g.fecha){l.lotes++;for(const e of ESTADOS_REB) if(g.counts[e]!=null) l.counts[e]=(l.counts[e]||0)+g.counts[e]}}
+  const lastRows=CENTROS.filter(c=>last.has(c)).map(c=>({centro:c,...last.get(c)}));
+  const tot={};for(const r of lastRows) for(const e of ESTADOS_REB) if(r.counts[e]!=null) tot[e]=(tot[e]||0)+r.counts[e];
+  const ultima=lastRows.reduce((a,r)=>r.fecha>a?r.fecha:a,'');
+  const ctrl=S.control.filter(r=>fc==='Todos'||r.centro===fc).slice().sort((a,b)=>b.fecha.localeCompare(a.fecha)||a.centro.localeCompare(b.centro));
+  const L=v=>ok?v:'…';
+  $('#main').innerHTML=`
+  ${head('Rebaño','Conteo de animales por fecha, centro, lote y estado. Las vacas en ordeña se cruzan con las VO de Leche.',`
+    <button class="btn" data-act="import" data-kind="rebano" ${ok?'':'disabled'}>Importar Excel</button>
+    <button class="btn primary" data-act="rec-new" data-kind="reb" ${ok?'':'disabled'}>Registrar conteo</button>`)}
+  ${modBanners('rebano')}
+  <div class="filters">${['Todos',...CENTROS].map(c=>`<button class="chip" data-set="rb.centro" data-val="${c}" aria-pressed="${fc===c}">${c==='Todos'?'Todos los centros':c}</button>`).join('')}</div>
+  <div class="summary s4">
+    ${stat(L(fmt0(cntTot(tot))),'Animales en el último conteo de cada centro')}
+    ${stat(L(fmt0(tot['En ordeña']||0)),'En ordeña')}
+    ${stat(L(fmt0((tot['Seca']||0))),'Secas')}
+    ${stat(L(ultima||'—'),'Conteo más reciente')}
+  </div>
+  ${tabsHtml('rb',[['ultimo','Último conteo por centro',null],['conteos','Historial',groups.length],['control','Control con Leche',ctrl.length]])}
+  <div id="pane"></div>`;
+  if(!ok){$('#pane').innerHTML=loadingBox(st.err?'No se pudo cargar el rebaño.':'Cargando conteos…');return}
+  const thE=ESTADOS_REB.map(e=>`<th class="num">${e}</th>`).join('');
+  if(S.rb.tab==='ultimo'){
+    $('#pane').innerHTML=`<div class="card"><div class="tablewrap">${!lastRows.length?`<div class="empty"><strong>Aún no hay conteos</strong>Registra el primero con “Registrar conteo” o importa la plantilla de rebaño.</div>`:`
+    <table><thead><tr><th>Centro</th><th>Fecha</th><th class="num">Lotes</th>${thE}<th class="num">Total</th></tr></thead><tbody>
+    ${lastRows.map(r=>`<tr><td><span class="sq" style="background:${salaColor(r.centro)}"></span> ${esc(r.centro)}</td><td class="num" style="text-align:left">${esc(r.fecha)}</td><td class="num">${r.lotes}</td>${cntRow(r.counts)}<td class="num"><b>${fmt0(cntTot(r.counts))}</b></td></tr>`).join('')}
+    </tbody>${lastRows.length>1?`<tfoot><tr><td colspan="3">Total</td>${cntRow(tot)}<td class="num">${fmt0(cntTot(tot))}</td></tr></tfoot>`:''}</table>`}</div></div>`;
+  }else if(S.rb.tab==='conteos'){
+    const list=groups.sort((a,b)=>b.fecha.localeCompare(a.fecha)||a.centro.localeCompare(b.centro)||byId(a.lote,b.lote));
+    $('#pane').innerHTML=`<div class="card"><div class="tablewrap">${!list.length?'<div class="empty">No hay conteos para este centro.</div>':`
+    <table><thead><tr><th>Fecha</th><th>Centro</th><th>Lote</th>${thE}<th class="num">Total</th><th>Observación</th></tr></thead><tbody>
+    ${list.map(g=>`<tr data-rec="reb" data-key="${esc(g.key)}" tabindex="0"><td class="num" style="text-align:left">${esc(g.fecha)}</td><td>${esc(g.centro)}</td><td class="id">${esc(g.lote)}</td>${cntRow(g.counts)}<td class="num"><b>${fmt0(cntTot(g.counts))}</b></td><td class="muted clip">${esc([...g.obs].join(' · '))}</td></tr>`).join('')}
+    </tbody></table>`}</div></div>`;
+  }else{
+    $('#pane').innerHTML=`<div class="card"><div class="tablewrap">${!ctrl.length?'<div class="empty"><strong>Sin conteos “En ordeña” todavía</strong>Cuando registres vacas en ordeña, aquí se comparan con las VO del módulo Leche del mismo día.</div>':`
+    <table><thead><tr><th>Fecha</th><th>Centro</th><th class="num">En ordeña (conteo)</th><th class="num">VO (leche)</th><th class="num">Diferencia</th><th>Control</th></tr></thead><tbody>
+    ${ctrl.map(r=>{const d=r.diferencia==null?null:+r.diferencia;const okk=d!=null&&Math.abs(d)<=Math.max(2,0.03*(+r.vo_leche||0));
+      return `<tr><td class="num" style="text-align:left">${esc(r.fecha)}</td><td>${esc(r.centro)}</td><td class="num">${fmt0(r.en_ordena_conteo)}</td><td class="num">${fmt0(r.vo_leche)}</td><td class="num">${d==null?'—':(d>0?'+':'')+fmt0(d)}</td>
+      <td>${d==null?'<span class="pill p-neu">Sin dato de leche</span>':okk?'<span class="pill p-ok">Cuadra</span>':'<span class="pill p-warn">Revisar</span>'}</td></tr>`}).join('')}
+    </tbody></table>`}</div></div>
+    <p class="note">“Cuadra” = la diferencia es de 2 vacas o menos, o de hasta 3 % de las VO.</p>`;
+  }
+}
+
+/* ================= Leche ================= */
+const lTot=r=>(r.l_planta==null&&r.l_descarte==null)?null:(+r.l_planta||0)+(+r.l_descarte||0);
+function byDay(rows){
+  const m=new Map();
+  for(const r of rows){
+    const g=m.get(r.fecha)||{fecha:r.fecha,vo:0,lt:0,conc:0,hasL:false};
+    g.vo+=+r.vo||0;const t=lTot(r);if(t!=null){g.lt+=t;g.hasL=true}g.conc+=+r.conc_kg||0;m.set(r.fecha,g);
+  }
+  return [...m.values()];
+}
+function lecheKpis(rows){
+  const d=byDay(rows);if(!d.length) return null;
+  const withL=d.filter(x=>x.hasL);
+  return {vacas:mean(d.map(x=>x.vo)),prod:mean(withL.map(x=>x.lt)),lvaca:mean(withL.filter(x=>x.vo>0).map(x=>x.lt/x.vo)),
+    conc:mean(d.map(x=>x.conc)),grl:mean(withL.filter(x=>x.lt>0).map(x=>x.conc*1000/x.lt)),dias:d.length};
+}
+function niceStep(raw){const p=10**Math.floor(Math.log10(raw||1)),n=raw/p;return (n<=1?1:n<=2?2:n<=2.5?2.5:n<=5?5:10)*p}
+function renderLeche(){
+  const st=S.mods.leche, ok=st.loaded;
+  const all=S.leche;
+  const months=[...new Set(all.map(r=>r.fecha.slice(0,7)))].sort();
+  const years=[...new Set(months.map(m=>m.slice(0,4)))];
+  if(months.length){
+    if(!months.includes(S.lc.from)) S.lc.from=months[0];
+    if(!months.includes(S.lc.to)) S.lc.to=months[months.length-1];
+    if(S.lc.from>S.lc.to) S.lc.to=S.lc.from;
+  }
+  const {from,to,sala}=S.lc;
+  const win=all.filter(r=>{const ym=r.fecha.slice(0,7);return ym>=from&&ym<=to});
+  const sel=win.filter(r=>sala==='Todos'||r.sala===sala);
+  const k=lecheKpis(sel);
+  const salasData=SALAS.filter(s=>all.some(r=>r.sala===s));
+  const L=v=>ok?v:'…';
+  $('#main').innerHTML=`
+  ${head('Leche','Producción diaria por sala: vacas en ordeña, litros a planta, descarte y concentrado',`
+    <button class="btn" data-act="import" data-kind="leche" ${ok?'':'disabled'}>Importar Excel</button>
+    <button class="btn primary" data-act="rec-new" data-kind="leche" ${ok?'':'disabled'}>Nuevo registro</button>`)}
+  ${modBanners('leche')}
+  ${!ok?loadingBox(st.err?'No se pudieron cargar los registros de leche.':'Cargando registros de leche…'):!all.length?`<div class="card"><div class="empty"><strong>Aún no hay registros de leche</strong>Importa el Excel normalizado (columnas FECHA, SALA, VO, L_PLANTA, L_DESCARTE, CONC_KG) o agrega un registro diario con “Nuevo registro”.</div></div>`:`
+  <div class="filters">${['Todos',...salasData].map(s=>`<button class="chip" data-set="lc.sala" data-val="${s}" aria-pressed="${sala===s}">${s==='Todos'?'Todas las salas':`<span class="sq" style="background:${salaColor(s)}"></span>${s}`}</button>`).join('')}</div>
+  <div class="panel">
+    <div class="period">
+      <div class="actions">
+        <button class="chip" data-act="lc-preset" data-val="all" aria-pressed="${from===months[0]&&to===months[months.length-1]}">Todo</button>
+        ${years.map(y=>`<button class="chip" data-act="lc-preset" data-val="${y}" aria-pressed="${from.slice(0,4)===y&&to.slice(0,4)===y}">${y}</button>`).join('')}
+        <button class="chip" data-act="lc-preset" data-val="12">Últimos 12 meses</button>
+      </div>
+      <div class="actions" style="align-items:center;font-size:13px">
+        <span class="muted">Desde</span>${selSet('lc.from','Desde',months.map(m=>[m,fmtYm(m)]),from)}
+        <span class="muted">hasta</span>${selSet('lc.to','Hasta',months.map(m=>[m,fmtYm(m)]),to)}
+      </div>
+    </div>
+    <div class="periodinfo">Mostrando <b>${fmtYm(from)} – ${fmtYm(to)}</b> · ${fmt0(k?k.dias:0)} días · ${fmt0(sel.length)} registros${sala==='Todos'?'':' de '+esc(sala)}</div>
+  </div>
+  <div class="summary">
+    ${stat(L(fmt0(k?.vacas))+'<small>vacas</small>','Vacas en ordeña (promedio)')}
+    ${stat(L(fmt0(k?.prod))+'<small>L/día</small>','Producción diaria (promedio)')}
+    ${stat(L(fmt1(k?.lvaca))+'<small>L/vaca</small>','Litros por vaca (promedio)')}
+    ${stat(L(fmt0(k?.conc))+'<small>kg/día</small>','Concentrado (promedio)')}
+    ${stat(L(fmt0(k?.grl))+'<small>g/L</small>','Concentrado por litro')}
+  </div>
+  <div class="panel">
+    <h3>Producción diaria promedio por mes (litros)</h3>
+    <div class="legend">${salasData.map(s=>`<span style="${sala!=='Todos'&&sala!==s?'opacity:.45':''}"><i class="sw" style="background:${salaColor(s)}"></i>${s}</span>`).join('')}</div>
+    <div class="chartwrap" id="lc-chart"></div>
+  </div>
+  <div class="two">
+    <div class="panel"><h3>Producción diaria promedio por sala (L)</h3><div class="hbars" id="lc-bar1"></div></div>
+    <div class="panel"><h3>Litros por vaca promedio por sala</h3><div class="hbars" id="lc-bar2"></div></div>
+  </div>
+  <div class="card"><div class="tablewrap">
+    <table><thead><tr><th>Fecha</th><th>Sala</th><th class="num">VO</th><th class="num">L planta</th><th class="num">L descarte</th><th class="num">L total</th><th class="num">L/vaca</th><th class="num">Conc. kg</th></tr></thead><tbody>
+    ${sel.slice().sort((a,b)=>b.fecha.localeCompare(a.fecha)||SALAS.indexOf(a.sala)-SALAS.indexOf(b.sala)).slice(0,60).map(r=>{const t=lTot(r);return `<tr data-rec="leche" data-key="${esc(r.fecha+'|'+r.sala)}" tabindex="0">
+      <td class="num" style="text-align:left">${esc(r.fecha)}</td><td><span class="sq" style="background:${salaColor(r.sala)}"></span> ${esc(r.sala)}</td>
+      <td class="num">${fmt0(r.vo)}</td><td class="num">${fmt0(r.l_planta)}</td><td class="num">${fmt0(r.l_descarte)}</td><td class="num"><b>${fmt0(t)}</b></td>
+      <td class="num">${t!=null&&+r.vo>0?fmt1(t/r.vo):'—'}</td><td class="num">${fmt0(r.conc_kg)}</td></tr>`}).join('')}
+    </tbody></table></div></div>
+  <p class="note">La tabla muestra los 60 registros más recientes del período. Litros totales = planta + descarte.</p>`}`;
+  if(ok&&all.length) drawLeche(win,months.filter(m=>m>=from&&m<=to),salasData);
+}
+function drawLeche(win,months,salas){
+  const sala=S.lc.sala;
+  /* promedio mensual de litros diarios por sala */
+  const agg=new Map();
+  for(const r of win){const t=lTot(r);if(t==null)continue;const k=r.sala+'|'+r.fecha.slice(0,7);const g=agg.get(k)||{s:0,n:0};g.s+=t;g.n++;agg.set(k,g)}
+  const series=salas.map(s=>({sala:s,pts:months.map(m=>{const g=agg.get(s+'|'+m);return g?g.s/g.n:null})}));
+  lineChart($('#lc-chart'),months,series,sala);
+  /* barras por sala */
+  const per=salas.map(s=>{const k=lecheKpis(win.filter(r=>r.sala===s));return {s,prod:k?.prod,lv:k?.lvaca}});
+  const bars=(el,f,dec)=>{const mx=Math.max(...per.map(p=>p[f]||0),1);el.innerHTML=per.slice().sort((a,b)=>(b[f]||0)-(a[f]||0)).map(p=>`<div class="hb ${sala!=='Todos'&&sala!==p.s?'dim':''}" title="${esc(p.s)}: ${dec?fmt1(p[f]):fmt0(p[f])}">
+    <span class="hb-l"><span class="sq" style="background:${salaColor(p.s)}"></span>${esc(p.s)}</span>
+    <span><span class="hb-b" style="width:${(p[f]||0)/mx*100}%;background:${salaColor(p.s)}"></span></span>
+    <span class="hb-v">${dec?fmt1(p[f]):fmt0(p[f])}</span></div>`).join('')};
+  bars($('#lc-bar1'),'prod',false);bars($('#lc-bar2'),'lv',true);
+}
+/* Gráfico de líneas en SVG: grilla fina, líneas de 2 px, cursor con detalle por sala. */
+function lineChart(el,months,series,sel){
+  const W=Math.max(300,el.clientWidth),H=280,m={l:52,r:16,t:10,b:28};
+  const iw=W-m.l-m.r,ih=H-m.t-m.b,n=months.length;
+  const vals=series.flatMap(s=>s.pts).filter(v=>v!=null);
+  if(!vals.length){el.innerHTML='<div class="empty">No hay litros registrados en este período.</div>';return}
+  const step=niceStep(Math.max(...vals)/4),top=Math.ceil(Math.max(...vals)/step)*step||step;
+  const x=i=>m.l+(n<=1?iw/2:i*iw/(n-1)),y=v=>m.t+ih-(v/top)*ih;
+  let g='';
+  for(let v=0;v<=top+1e-9;v+=step) g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${y(v)}" y2="${y(v)}" style="stroke:var(${v===0?'--line-strong':'--grid'})" stroke-width="1"/><text x="${m.l-8}" y="${y(v)+4}" text-anchor="end">${nf0.format(v)}</text>`;
+  const every=Math.max(1,Math.ceil(n/Math.max(1,Math.floor(iw/62))));
+  months.forEach((mo,i)=>{if(i%every===0||i===n-1&&n-1-((n-1)-(n-1)%every)>=every/2) g+=`<text x="${x(i)}" y="${H-8}" text-anchor="middle">${MES[+mo.slice(5,7)-1]} ${mo.slice(2,4)}</text>`});
+  const path=pts=>{let d='',pen=false;pts.forEach((v,i)=>{if(v==null){pen=false;return}d+=(pen?'L':'M')+x(i).toFixed(1)+' '+y(v).toFixed(1);pen=true});return d};
+  const ordered=[...series].sort((a,b)=>(a.sala===sel)-(b.sala===sel));
+  for(const s of ordered){
+    const on=sel==='Todos'||sel===s.sala;
+    g+=`<path d="${path(s.pts)}" fill="none" style="stroke:${on?salaColor(s.sala):'var(--line-strong)'}" stroke-width="${on?2:1.5}" stroke-linejoin="round" stroke-linecap="round"/>`;
+    /* puntos sueltos (un mes sin vecinos) */
+    s.pts.forEach((v,i)=>{if(v!=null&&s.pts[i-1]==null&&s.pts[i+1]==null) g+=`<circle cx="${x(i)}" cy="${y(v)}" r="3" style="fill:${on?salaColor(s.sala):'var(--line-strong)'}"/>`});
+  }
+  el.innerHTML=`<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Producción diaria promedio por mes y sala">${g}<g id="lc-hover"></g><rect x="${m.l}" y="${m.t}" width="${iw}" height="${ih}" fill="transparent" id="lc-hit"/></svg><div class="tip" id="lc-tip" hidden></div>`;
+  const hit=el.querySelector('#lc-hit'),hov=el.querySelector('#lc-hover'),tip=el.querySelector('#lc-tip');
+  const show=ev=>{
+    const r=el.getBoundingClientRect(),mx=ev.clientX-r.left;
+    const i=Math.max(0,Math.min(n-1,Math.round(n<=1?0:(mx-m.l)/(iw/(n-1)))));
+    const vis=series.filter(s=>s.pts[i]!=null&&(sel==='Todos'||s.sala===sel)).sort((a,b)=>b.pts[i]-a.pts[i]);
+    hov.innerHTML=`<line x1="${x(i)}" x2="${x(i)}" y1="${m.t}" y2="${m.t+ih}" style="stroke:var(--line-strong)" stroke-width="1"/>`+
+      vis.map(s=>`<circle cx="${x(i)}" cy="${y(s.pts[i])}" r="4.5" style="fill:${salaColor(s.sala)};stroke:var(--surface)" stroke-width="2"/>`).join('');
+    tip.innerHTML=`<b>${fmtYm(months[i])}</b>`+(vis.length?vis.map(s=>`<div><i class="sw" style="background:${salaColor(s.sala)}"></i>${esc(s.sala)}<span class="v">${fmt0(s.pts[i])} L</span></div>`).join(''):'<div class="muted">Sin datos este mes</div>');
+    tip.hidden=false;
+    const tw=tip.offsetWidth,left=x(i)+14+tw>W?x(i)-14-tw:x(i)+14;
+    tip.style.left=Math.max(0,left)+'px';tip.style.top=(m.t+4)+'px';
+  };
+  hit.addEventListener('pointermove',show);hit.addEventListener('pointerdown',show);
+  hit.addEventListener('pointerleave',()=>{hov.innerHTML='';tip.hidden=true});
+}
+let rsz;window.addEventListener('resize',()=>{clearTimeout(rsz);rsz=setTimeout(()=>{if(S.user&&S.mod==='leche'&&!S.rec)render()},200)});
+
+/* ---------- ficha de equipo ---------- */
+function opt(list,val,blank=true){return (blank?'<option value="">—</option>':'')+list.map(v=>{const [k,l]=Array.isArray(v)?v:[v,v];return `<option value="${esc(k)}" ${val===k?'selected':''}>${esc(l)}</option>`}).join('')}
+function fld(id,label,val,{type='text',wide=false,need=false,list=null,ro=false,ph=''}={}){
+  const inner=list?`<select class="field" id="${id}" ${ro?'disabled':''}>${list}</select>`:
+    `<input class="field" id="${id}" type="${type}" value="${esc(val??'')}" ${ro?'readonly':''} ${type==='number'?'inputmode="decimal" min="0" step="any"':''} placeholder="${esc(ph)}">`;
+  return `<label class="f ${wide?'wide':''} ${need?'need':''}">${label}${inner}</label>`;
+}
+function renderDrawer(){
+  const L=$('#layer');
+  if(S.rec&&S.user){renderRec();return}
+  if(!S.open||!S.user){L.innerHTML='';return}
+  const isNew=S.open==='__new';
+  const e=isNew?{estado:'Activa',tipo:'Tractor'}:S.eq.get(S.open);
+  if(!e){S.open=null;L.innerHTML='';return}
+  const id=e.id_maquina||'';
+  const ro=!S.loaded||S.saving;
+  const g=isNew?[]:gaps(e); const need=k=>g.includes(k);
+  const mt=isNew?null:mant(e);
+  const ops=[...S.ops.values()].map(o=>[o.id_operador,o.id_operador+' · '+o.nombre]);
+  if(e.operador_asignado&&!S.ops.has(e.operador_asignado)) ops.push([e.operador_asignado,e.operador_asignado+' (no registrado)']);
+  L.innerHTML=`<div class="shade" data-act="close"></div>
+  <section class="drawer" role="dialog" aria-modal="true" aria-labelledby="dtitle">
+    <div class="dhead"><div><div class="id muted">${isNew?'Nuevo equipo':esc(id)}</div><h2 id="dtitle">${isNew?'Ficha del equipo':esc(e.nombre||id)}</h2></div>
+      <button class="btn ghost" data-act="close" aria-label="Cerrar">Cerrar</button></div>
+    <form class="dbody" id="eqform" novalidate>
+      ${!isNew&&g.length?`<div class="banner" style="margin:0">Falta completar: ${g.join(', ')}.</div>`:''}
+      <fieldset><legend>Identificación</legend>
+        ${fld('e-id','ID del equipo',id,{ro:!isNew,ph:'TR-30'})}
+        ${fld('e-num','N° interno',e.n_interno,{type:'number'})}
+        ${fld('e-nombre','Nombre',e.nombre,{wide:true})}
+        ${fld('e-tipo','Tipo',null,{list:opt(TIPOS,e.tipo,false)})}
+        ${fld('e-estado','Estado',null,{list:opt(ESTADOS,e.estado,false)})}
+        ${fld('e-marca','Marca',e.marca)}${fld('e-modelo','Modelo',e.modelo)}
+        ${fld('e-anio','Año',e.anio,{type:'number'})}${fld('e-color','Color',e.color)}
+        ${fld('e-patente','Patente',e.patente)}${fld('e-prop','Propietario',e.propietario)}
+        ${fld('e-motor','N° motor',e.n_motor)}${fld('e-serie','N° serie',e.n_serie)}
+      </fieldset>
+      <fieldset><legend>Operación</legend>
+        ${fld('e-centro','Centro',null,{list:opt(CENTROS,e.centro),need:need('centro')})}
+        ${fld('e-op','Operador asignado',null,{list:opt(ops,e.operador_asignado),need:need('operador')})}
+        ${fld('e-uso','Uso principal',e.uso_principal,{wide:true,need:need('uso'),ph:'Alimentación, siembra, purines…'})}
+      </fieldset>
+      <fieldset><legend>Mantención</legend>
+        ${fld('e-iv','Intervalo de mantención (horas)',e.intervalo_mant_horas,{type:'number',need:need('intervalo'),ph:'250'})}
+        ${fld('e-h0','Horómetro inicial (h)',e.horometro_inicial,{type:'number',need:need('horómetro')})}
+        ${mt?`<div class="calc"><span>Horómetro actual <b>${SIN_HORAS.has(e.tipo)?'—':fmtN(horoActual(e))}</b></span><span>Próxima mantención <b>${mt.txt}</b></span></div>
+        <p class="muted" style="grid-column:1/-1;margin:0;font-size:12px">El horómetro actual se actualiza solo con las cargas de combustible y las mantenciones registradas.</p>`:''}
+      </fieldset>
+      <fieldset><legend>Documentos</legend>
+        ${DOCS.map(([k,name])=>{const d=isNew?null:S.docs.get(id+'__'+k);return `<div class="docrow">
+          <label class="f">${name}<select class="field" id="d-${k}-sit">${opt(SITS,d?.situacion||'Sin dato',false)}</select></label>
+          <label class="f">Vence (mes)<input class="field" type="month" id="d-${k}-v" value="${esc(d?.vencimiento||'')}"></label>
+          <label class="f">Estado<span class="pill ${PCLS[docState(d)]}" style="align-self:flex-start;margin-top:6px">${docState(d)}</span></label></div>`}).join('')}
+      </fieldset>
+      <div class="err" ${S.formErr?'':'hidden'}>${esc(S.formErr)}</div>
+    </form>
+    <div class="dfoot">
+      <div>${isNew?'':S.confirmDel?`<span class="confirm">¿Eliminar ${esc(id)} y sus documentos? <button class="btn danger" data-act="del-yes" ${ro?'disabled':''}>Eliminar</button><button class="btn ghost" data-act="del-no">Cancelar</button></span>`:`<button class="btn danger" data-act="del" ${ro?'disabled':''}>Eliminar equipo</button>`}</div>
+      <div class="actions"><button class="btn ghost" data-act="close">Cancelar</button><button class="btn primary" data-act="save" ${ro?'disabled':''}>${S.saving?'Guardando…':'Guardar ficha'}</button></div>
+    </div>
+  </section>`;
+}
+const val=id=>{const el=document.getElementById(id);if(!el)return null;const v=el.value.trim();return v===''?null:v};
+const numv=(id,dec=0)=>{const v=val(id);if(v==null)return null;const n=+v.replace(',','.');if(isNaN(n))return null;const f=10**dec;return Math.round(n*f)/f};
+async function saveEquipo(){
+  if(S.saving) return;
+  const isNew=S.open==='__new';
+  const id=((isNew?val('e-id'):S.open)||'').toUpperCase();
+  if(!RE_EQ.test(id)){S.formErr='El ID debe ser el prefijo del tipo, un guion y un número de dos cifras o más, por ejemplo TR-30 o CA-X06.';renderDrawer();return}
+  if(isNew&&S.eq.has(id)){S.formErr=`Ya existe un equipo con el ID ${id}.`;renderDrawer();return}
+  if(!val('e-nombre')){S.formErr='El equipo necesita un nombre.';renderDrawer();return}
+  const anio=numv('e-anio');
+  if(anio!=null&&(anio<1950||anio>2100)){S.formErr='El año debe estar entre 1950 y 2100.';renderDrawer();return}
+  const iv=numv('e-iv');
+  if(iv!=null&&iv<=0){S.formErr='El intervalo de mantención debe ser mayor que cero.';renderDrawer();return}
+  const e={...eqRow(S.eq.get(id)||{}),id_maquina:id,n_interno:numv('e-num'),nombre:val('e-nombre'),tipo:val('e-tipo'),estado:val('e-estado'),marca:val('e-marca'),modelo:val('e-modelo'),
+    anio,color:val('e-color'),patente:val('e-patente'),propietario:val('e-prop'),n_motor:val('e-motor'),n_serie:val('e-serie'),
+    centro:val('e-centro'),operador_asignado:val('e-op'),uso_principal:val('e-uso'),intervalo_mant_horas:iv,horometro_inicial:numv('e-h0',1)};
+  const docs=[];
+  for(const [k,name] of DOCS){
+    let sit=val(`d-${k}-sit`)||'Sin dato'; const v=val(`d-${k}-v`);
+    if(v&&sit!=='Con fecha') sit='Con fecha';
+    if(sit==='Con fecha'&&!v){S.formErr=`Indica el mes de vencimiento de ${name.toLowerCase()} o cambia su situación.`;renderDrawer();return}
+    const old=S.docs.get(id+'__'+k);
+    const d={id_maquina:id,documento:name,situacion:sit,vencimiento:sit==='Con fecha'?v:null,texto_original:old?old.texto_original:null};
+    if(!old||old.situacion!==d.situacion||(old.vencimiento||null)!==d.vencimiento) docs.push(docRow(d));
+  }
+  S.formErr='';S.saving=true;renderDrawer();
+  try{
+    await upsert('equipos',[e],'id_maquina');
+    await upsert('documentos',docs,'id_maquina,documento');
+    S.saving=false;S.open=null;S.confirmDel=false;toast(`Ficha de ${id} guardada`);await load();
+  }catch(err){S.saving=false;S.formErr=errMsg(err);renderDrawer()}
+}
+async function deleteEquipo(){
+  const id=S.open;
+  S.saving=true;renderDrawer();
+  try{
+    const [c,m]=await Promise.all([
+      sb.from('combustible').select('id_carga',{count:'exact',head:true}).eq('id_maquina',id),
+      sb.from('mantenciones').select('id_intervencion',{count:'exact',head:true}).eq('id_maquina',id)]);
+    if(c.error) throw c.error; if(m.error) throw m.error;
+    if((c.count||0)+(m.count||0)>0){S.saving=false;S.confirmDel=false;S.formErr=`${id} tiene cargas de combustible o mantenciones registradas, así que no se puede eliminar. Cambia su estado a “Baja” o “Vendida”.`;renderDrawer();return}
+    await must(sb.from('documentos').delete().eq('id_maquina',id));
+    await must(sb.from('equipos').delete().eq('id_maquina',id));
+    S.saving=false;S.open=null;S.confirmDel=false;toast(`${id} eliminado`);await load();
+  }catch(err){S.saving=false;S.formErr=errMsg(err);renderDrawer()}
+}
+
+/* ---------- formularios de registros (combustible, mantenciones, rebaño, leche) ---------- */
+const REC={
+  comb:{
+    title:(r,n)=>n?'Nueva carga de combustible':'Carga '+r.id_carga,
+    sub:(r,n)=>n?'Combustible':r.fecha,
+    body(r,n){
+      const lr=r.id_maquina?lastReading(r.id_maquina,r.fecha,n?null:r.id_carga):null;
+      return `<fieldset><legend>Carga</legend>
+        ${fld('r-fecha','Fecha',r.fecha,{type:'date'})}
+        ${fld('r-litros','Litros',r.litros,{type:'number'})}
+        ${fld('r-eq','Equipo',null,{list:opt(eqList(r.id_maquina),r.id_maquina),wide:true})}
+        ${fld('r-op','Operador (quién carga)',null,{list:opt(opList(r.id_operador),r.id_operador),wide:true})}
+        ${!S.ops.size?'<p class="err" style="grid-column:1/-1;margin:0">Aún no hay operadores. Agrégalos en Equipos › Operadores para poder registrar cargas.</p>':''}
+        ${fld('r-horo','Horómetro (h)',r.horometro,{type:'number'})}
+        ${fld('r-lleno','Estanque lleno',null,{list:opt(['Sí','No'],r.estanque_lleno===false?'No':'Sí',false)})}
+        <div class="calc">${r.id_maquina?(lr?`<span>Última lectura de ${esc(r.id_maquina)} <b>${fmtN(lr.h)} h</b> ${lr.f?'el '+esc(lr.f):''} (${esc(lr.src)})</span>`:`<span>${esc(r.id_maquina)} aún no tiene lecturas de horómetro.</span>`):'<span>Elige el equipo para ver su última lectura de horómetro.</span>'}</div>
+      </fieldset>
+      <fieldset><legend>Origen y costo</legend>
+        ${fld('r-origen','Origen',null,{list:opt(ORIGENES,r.origen)})}
+        ${fld('r-precio','Precio por litro (CLP)',r.precio_litro,{type:'number'})}
+        ${fld('r-centro','Centro (solo si trabajó fuera de su centro)',null,{list:opt(CENTROS,r.centro),wide:true})}
+        ${fld('r-obs','Observación',r.observacion,{wide:true})}
+      </fieldset>
+      <p class="note" style="margin:0">Marca “Estanque lleno” cuando se llena completo: el consumo en L/h se calcula entre dos cargas llenas.</p>`;
+    },
+    read:()=>({fecha:val('r-fecha'),id_maquina:val('r-eq'),id_operador:val('r-op'),litros:numv('r-litros',1),horometro:numv('r-horo',1),estanque_lleno:val('r-lleno')!=='No',origen:val('r-origen'),precio_litro:numv('r-precio'),centro:val('r-centro'),observacion:val('r-obs')}),
+    check(r){
+      if(!r.fecha) return 'Indica la fecha de la carga.';
+      if(!r.id_maquina) return 'Elige el equipo.';
+      if(!r.id_operador) return S.ops.size?'Elige quién hizo la carga.':'Primero agrega operadores en Equipos › Operadores.';
+      if(!(r.litros>0)) return 'Los litros deben ser mayores que cero.';
+      if(r.horometro==null&&usaHoras(r.id_maquina)) return 'Indica el horómetro: con él se calcula el horómetro actual y el consumo en L/h.';
+      if(r.precio_litro!=null&&r.precio_litro<0) return 'El precio no puede ser negativo.';
+    },
+    warn:(r,n,key)=>horoWarn(r,n?null:key),
+    async save(r,n,key){if(n) await must(sb.from('combustible').insert(r)); else await must(sb.from('combustible').update(r).eq('id_carga',key))},
+    async del(key){await must(sb.from('combustible').delete().eq('id_carga',key))},
+    done:'Carga guardada',after:['combustible','mantenciones','base']
+  },
+  mant:{
+    title:(r,n)=>n?'Nueva intervención':'Intervención '+r.id_intervencion,
+    sub:(r,n)=>n?'Mantenciones':r.fecha,
+    body(r,n){
+      const e=r.id_maquina?S.eq.get(r.id_maquina):null, mt=e?mant(e):null;
+      return `<fieldset><legend>Intervención</legend>
+        ${fld('r-fecha','Fecha',r.fecha,{type:'date'})}
+        ${fld('r-tipo','Tipo',null,{list:opt(['Preventiva','Correctiva'],r.tipo,false)})}
+        ${fld('r-eq','Equipo',null,{list:opt(eqList(r.id_maquina),r.id_maquina),wide:true})}
+        ${fld('r-sis','Sistema',null,{list:opt(SISTEMAS,r.sistema)})}
+        ${fld('r-horo','Horómetro (h)',r.horometro,{type:'number',ph:'Obligatorio en preventivas'})}
+        ${fld('r-desc','Descripción',r.descripcion,{wide:true,ph:'Cambio de aceite y filtros 250 h'})}
+        ${e?`<div class="calc"><span>Intervalo <b>${e.intervalo_mant_horas==null?'sin plan':fmt0(e.intervalo_mant_horas)+' h'}</b></span><span>Horómetro actual <b>${fmtN(horoActual(e))}</b></span><span>Próxima <b>${mt.txt}</b></span></div>`:''}
+      </fieldset>
+      <fieldset><legend>Costo y taller</legend>
+        ${fld('r-rep','Repuestos (CLP)',r.costo_repuestos,{type:'number'})}
+        ${fld('r-mo','Mano de obra (CLP)',r.costo_mano_obra,{type:'number'})}
+        ${fld('r-taller','Taller',null,{list:opt(['Interno','Externo'],r.tipo_taller)})}
+        ${fld('r-prov','Proveedor',r.proveedor)}
+        ${fld('r-dias','Días fuera de servicio',r.dias_fuera_servicio,{type:'number'})}
+      </fieldset>
+      <p class="note" style="margin:0">Si no separas repuestos y mano de obra, pon el total en Repuestos y deja Mano de obra en 0.</p>`;
+    },
+    read:()=>({fecha:val('r-fecha'),id_maquina:val('r-eq'),tipo:val('r-tipo'),sistema:val('r-sis'),descripcion:val('r-desc'),horometro:numv('r-horo',1),costo_repuestos:numv('r-rep')??0,costo_mano_obra:numv('r-mo')??0,proveedor:val('r-prov'),tipo_taller:val('r-taller'),dias_fuera_servicio:numv('r-dias',1)}),
+    check(r){
+      if(!r.fecha) return 'Indica la fecha.';
+      if(!r.id_maquina) return 'Elige el equipo.';
+      if(r.tipo==='Preventiva'&&r.horometro==null) return 'Las preventivas necesitan el horómetro: desde esa lectura se calcula la próxima mantención.';
+      if(r.costo_repuestos<0||r.costo_mano_obra<0) return 'Los costos no pueden ser negativos.';
+    },
+    warn:(r,n,key)=>horoWarn(r,n?null:key),
+    async save(r,n,key){if(n) await must(sb.from('mantenciones').insert(r)); else await must(sb.from('mantenciones').update(r).eq('id_intervencion',key))},
+    async del(key){await must(sb.from('mantenciones').delete().eq('id_intervencion',key))},
+    done:'Intervención guardada',after:['mantenciones','combustible','base']
+  },
+  reb:{
+    title:(r,n)=>n?'Registrar conteo':'Conteo '+r.lote,
+    sub:(r,n)=>n?'Rebaño':r.fecha+' · '+r.centro,
+    body(r,n){
+      return `<fieldset><legend>Conteo</legend>
+        ${fld('r-fecha','Fecha',r.fecha,{type:'date',ro:!n})}
+        ${fld('r-centro','Centro',null,{list:opt(CENTROS,r.centro),ro:!n})}
+        ${fld('r-lote','Lote',r.lote,{ro:!n,ph:'L1'})}
+        <div class="grid3">${ESTADOS_REB.map((e,i)=>fld('r-e'+i,e,r.counts?.[e],{type:'number'})).join('')}</div>
+        ${fld('r-obs','Observación',r.obs,{wide:true,ph:'Revisión veterinario'})}
+      </fieldset>
+      <p class="note" style="margin:0">Deja en blanco los estados que no se contaron. Usa los mismos lotes que en la planilla de leche (L1, L2, L3).</p>`;
+    },
+    read:()=>({fecha:val('r-fecha'),centro:val('r-centro'),lote:(val('r-lote')||'').toUpperCase()||null,counts:Object.fromEntries(ESTADOS_REB.map((e,i)=>[e,numv('r-e'+i)])),obs:val('r-obs')}),
+    check(r,n){
+      if(!r.fecha||!r.centro||!r.lote) return 'Indica fecha, centro y lote.';
+      const vs=Object.values(r.counts).filter(v=>v!=null);
+      if(!vs.length) return 'Anota al menos una cantidad.';
+      if(vs.some(v=>v<0||!Number.isInteger(v))) return 'Las cantidades deben ser números enteros, cero o más.';
+      if(n&&S.reb.some(x=>x.fecha===r.fecha&&x.centro===r.centro&&x.lote===r.lote)) return 'Ya hay un conteo para ese día, centro y lote. Ábrelo desde Historial para corregirlo.';
+    },
+    warn:()=>'',
+    async save(r,n){
+      const rows=ESTADOS_REB.filter(e=>r.counts[e]!=null).map(e=>({fecha:r.fecha,centro:r.centro,lote:r.lote,estado:e,cantidad:r.counts[e],observacion:r.obs}));
+      await upsert('rebano',rows,'fecha,centro,lote,estado');
+      if(!n) for(const e of ESTADOS_REB) if(r.counts[e]==null&&S.reb.some(x=>x.fecha===r.fecha&&x.centro===r.centro&&x.lote===r.lote&&x.estado===e))
+        await must(sb.from('rebano').delete().match({fecha:r.fecha,centro:r.centro,lote:r.lote,estado:e}));
+    },
+    async del(key){const [fecha,centro,lote]=key.split('|');await must(sb.from('rebano').delete().match({fecha,centro,lote}))},
+    done:'Conteo guardado',after:['rebano']
+  },
+  leche:{
+    title:(r,n)=>n?'Nuevo registro de leche':r.sala,
+    sub:(r,n)=>n?'Leche':r.fecha,
+    body(r,n){
+      const t=lTot(r);
+      return `<fieldset><legend>Registro diario</legend>
+        ${fld('r-fecha','Fecha',r.fecha,{type:'date',ro:!n})}
+        ${fld('r-sala','Sala',null,{list:opt(SALAS,r.sala),ro:!n})}
+        ${fld('r-vo','Vacas en ordeña (VO)',r.vo,{type:'number'})}
+        ${fld('r-conc','Concentrado (kg)',r.conc_kg,{type:'number'})}
+        ${fld('r-lp','Litros a planta',r.l_planta,{type:'number'})}
+        ${fld('r-ld','Litros de descarte',r.l_descarte,{type:'number'})}
+        ${n?'':`<div class="calc"><span>Litros totales <b>${fmt0(t)}</b></span><span>L/vaca <b>${t!=null&&+r.vo>0?fmt1(t/r.vo):'—'}</b></span><span>g/L <b>${t>0&&r.conc_kg!=null?fmt0(r.conc_kg*1000/t):'—'}</b></span></div>`}
+      </fieldset>`;
+    },
+    read:()=>({fecha:val('r-fecha'),sala:val('r-sala'),vo:numv('r-vo'),l_planta:numv('r-lp',1),l_descarte:numv('r-ld',1),conc_kg:numv('r-conc',1)}),
+    check(r,n){
+      if(!r.fecha||!r.sala) return 'Indica la fecha y la sala.';
+      if([r.vo,r.l_planta,r.l_descarte,r.conc_kg].every(v=>v==null)) return 'Anota al menos un valor.';
+      if([r.vo,r.l_planta,r.l_descarte,r.conc_kg].some(v=>v!=null&&v<0)) return 'Los valores no pueden ser negativos.';
+      if(n&&S.leche.some(x=>x.fecha===r.fecha&&x.sala===r.sala)) return 'Ya hay un registro para esa fecha y sala. Ábrelo desde la tabla para corregirlo.';
+    },
+    warn(r){const t=(r.l_planta||0)+(r.l_descarte||0);if(r.vo>0&&t/r.vo>60)return `Son ${fmt1(t/r.vo)} litros por vaca, un valor muy alto. Revisa VO y litros, o pulsa “Guardar igual”.`;return ''},
+    async save(r){await upsert('leche',[r],'fecha,sala')},
+    async del(key){const [fecha,sala]=key.split('|');await must(sb.from('leche').delete().match({fecha,sala}))},
+    done:'Registro guardado',after:['leche','rebano']
+  }
+};
+function horoWarn(r,excl){
+  if(r.horometro==null||!r.id_maquina) return '';
+  const lr=lastReading(r.id_maquina,r.fecha,excl);
+  if(lr&&r.horometro<lr.h) return `El horómetro (${fmtN(r.horometro)} h) es menor que la última lectura de ${r.id_maquina}: ${fmtN(lr.h)} h${lr.f?' el '+lr.f:''} (${lr.src}). Revisa el dato, o pulsa “Guardar igual” si se cambió el horómetro.`;
+  return '';
+}
+function openRec(kind,key){
+  let data;
+  if(kind==='comb') data={...S.comb.find(r=>r.id_carga===key)};
+  else if(kind==='mant') data={...S.mant.find(r=>r.id_intervencion===key)};
+  else if(kind==='reb'){const g=rebGroups().find(g=>g.key===key);data={fecha:g.fecha,centro:g.centro,lote:g.lote,counts:{...g.counts},obs:[...g.obs].join(' · ')||null}}
+  else if(kind==='leche'){const [f,s]=key.split('|');data={...S.leche.find(r=>r.fecha===f&&r.sala===s)}}
+  S.rec={kind,key,isNew:false,data};S.formErr='';S.warn='';S.warnAck=false;S.confirmDel=false;renderDrawer();
+}
+function newRec(kind){
+  const d={comb:{fecha:hoy(),estanque_lleno:true,origen:'Estanque fundo',id_maquina:S.cb.eq!=='Todos'?S.cb.eq:null},
+    mant:{fecha:hoy(),tipo:'Preventiva',costo_repuestos:0,costo_mano_obra:0,id_maquina:S.mt.eq!=='Todos'?S.mt.eq:null},
+    reb:{fecha:hoy(),centro:S.rb.centro!=='Todos'?S.rb.centro:null,lote:'',counts:{}},
+    leche:{fecha:hoy(),sala:S.lc.sala!=='Todos'?S.lc.sala:null}}[kind];
+  S.rec={kind,key:null,isNew:true,data:d};S.formErr='';S.warn='';S.warnAck=false;S.confirmDel=false;renderDrawer();
+}
+function closeRec(){S.rec=null;S.formErr='';S.warn='';S.warnAck=false;S.confirmDel=false;renderDrawer()}
+function renderRec(){
+  const {kind,isNew,data:r}=S.rec, M=REC[kind], ro=S.saving;
+  $('#layer').innerHTML=`<div class="shade" data-act="close"></div>
+  <section class="drawer" role="dialog" aria-modal="true" aria-labelledby="dtitle">
+    <div class="dhead"><div><div class="id muted">${esc(M.sub(r,isNew))}</div><h2 id="dtitle">${esc(M.title(r,isNew))}</h2></div>
+      <button class="btn ghost" data-act="close" aria-label="Cerrar">Cerrar</button></div>
+    <form class="dbody" id="recform" novalidate>
+      ${M.body(r,isNew)}
+      ${S.warn?`<div class="banner" style="margin:0">${esc(S.warn)}</div>`:''}
+      <div class="err" role="alert" ${S.formErr?'':'hidden'}>${esc(S.formErr)}</div>
+    </form>
+    <div class="dfoot">
+      <div>${isNew?'':S.confirmDel?`<span class="confirm">¿Eliminar este registro? <button class="btn danger" data-act="rec-del-yes" ${ro?'disabled':''}>Eliminar</button><button class="btn ghost" data-act="del-no">Cancelar</button></span>`:`<button class="btn danger" data-act="del" ${ro?'disabled':''}>Eliminar</button>`}</div>
+      <div class="actions"><button class="btn ghost" data-act="close">Cancelar</button><button class="btn primary" data-act="rec-save" ${ro?'disabled':''}>${S.saving?'Guardando…':S.warn?'Guardar igual':'Guardar'}</button></div>
+    </div>
+  </section>`;
+}
+async function afterWrite(list){
+  const jobs=[];
+  for(const m of list){if(m==='base')jobs.push(load());else if(S.mods[m].loaded||m===S.rec?.kind)jobs.push(loadMod(m))}
+  await Promise.all(jobs);
+}
+async function saveRec(){
+  if(S.saving||!S.rec) return;
+  const {kind,isNew,key}=S.rec, M=REC[kind];
+  const r=M.read(); S.rec.data={...S.rec.data,...r};
+  const bad=M.check(r,isNew);
+  if(bad){S.formErr=bad;renderDrawer();return}
+  const w=S.warnAck?'':M.warn(r,isNew,key);
+  if(w){S.warn=w;S.warnAck=true;S.formErr='';renderDrawer();return}
+  S.formErr='';S.saving=true;renderDrawer();
+  try{await M.save(r,isNew,key);S.saving=false;closeRec();toast(M.done);await afterWrite(M.after)}
+  catch(e){S.saving=false;S.formErr=errMsg(e);renderDrawer()}
+}
+async function deleteRec(){
+  const {kind,key}=S.rec, M=REC[kind];
+  S.saving=true;renderDrawer();
+  try{await M.del(key);S.saving=false;closeRec();toast('Registro eliminado');await afterWrite(M.after)}
+  catch(e){S.saving=false;S.formErr=errMsg(e);renderDrawer()}
+}
+
+/* ---------- importar Excel (upsert por clave; nunca borra) ---------- */
+const key=h=>String(h).trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
+const clean=v=>{if(v==null)return null;if(v instanceof Date)return v;const t=String(v).trim();return t===''?null:(typeof v==='number'?v:t)};
+const ym=v=>{if(v instanceof Date)return `${v.getFullYear()}-${String(v.getMonth()+1).padStart(2,'0')}`;if(typeof v==='string'){const m=v.match(/^(\d{4})-(\d{2})/);if(m)return m[1]+'-'+m[2]}return null};
+const yes=v=>v==null?true:!/^(no|n|false|0)$/i.test(String(v).trim());
+/* Fecha desde Excel: número de serie, texto AAAA-MM-DD o DD-MM-AAAA. */
+function toISO(v){
+  if(v==null||v==='') return null;
+  if(v instanceof Date&&!isNaN(v)) return isoLocal(v);
+  if(typeof v==='number'){const d=XLSX.SSF.parse_date_code(v);return d?`${d.y}-${String(d.m).padStart(2,'0')}-${String(d.d).padStart(2,'0')}`:null}
+  const s=String(v).trim();let m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if(m) return `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
+  m=s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/);
+  if(m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+  return null;
+}
+/* Número desde Excel: si el texto trae coma decimal (1.234,5) se quitan los puntos de miles. */
+const nm=v=>{if(v==null||v==='')return null;if(typeof v==='number')return v;const s=String(v).trim();const n=+(s.includes(',')?s.replace(/\./g,'').replace(',','.'):s);return isNaN(n)?null:n};
+const SALA_NORM={'PICHIJUAN':'PICHI JUAN','PICHI JUAN':'PICHI JUAN','MELIES':'LOS MELIES','LOS MELIES':'LOS MELIES','S JORGE':'S JORGE','SAN JORGE':'S JORGE','S SEBAST':'S SEBAST','S SEBAST.':'S SEBAST','SAN SEBASTIAN':'S SEBAST','S SEBASTIAN':'S SEBAST','COPIHUE':'COPIHUE'};
+const normSala=s=>s==null?null:(SALA_NORM[String(s).trim().toUpperCase().replace(/\s+/g,' ')]||String(s).trim().toUpperCase());
+const LECHE_COLS={fecha:'fecha',date:'fecha',sala:'sala',centro:'sala',vo:'vo',vacas:'vo',vacas_ordena:'vo',vacas_en_ordena:'vo',l_planta:'l_planta',l_estanque:'l_planta',litros_planta:'l_planta',estanque:'l_planta',l_descarte:'l_descarte',descarte:'l_descarte',conc_kg:'conc_kg',conc:'conc_kg',concentrado:'conc_kg',kg_conc:'conc_kg'};
+function sheetRows(wb,names,fallbackFirst){
+  let s=wb.SheetNames.find(x=>names.includes(key(x)));
+  if(!s&&fallbackFirst) s=wb.SheetNames.find(x=>/leche|normal|datos/i.test(x))||wb.SheetNames[0];
+  if(!s) return null;
+  return XLSX.utils.sheet_to_json(wb.Sheets[s],{defval:null,raw:true}).map(r=>Object.fromEntries(Object.entries(r).map(([k,v])=>[key(k),clean(v)])));
+}
+function nextIdGen(prefix,ids){let n=0;for(const id of ids){const m=String(id).match(new RegExp('^'+prefix+'-(\\d+)$'));if(m)n=Math.max(n,+m[1])}return()=>prefix+'-'+String(++n).padStart(4,'0')}
+const dedupe=(rows,k)=>[...new Map(rows.map(r=>[k(r),r])).values()];
+async function importReg(kind,file){
+  if(typeof XLSX==='undefined'){toast('No se pudo cargar el lector de Excel. Recarga la página.');return}
+  let wb;try{wb=XLSX.read(await file.arrayBuffer())}catch(e){toast('El archivo no se pudo leer como Excel.');return}
+  const issues=[];let rows=[],table,conflict;
+  if(kind==='combustible'){
+    const src=sheetRows(wb,['cargas','combustible']);
+    if(!src){toast('No encontré la hoja “Cargas” en el archivo.');return}
+    const gen=nextIdGen('CAR',[...S.comb.map(r=>r.id_carga),...src.map(r=>r.id_carga)]);
+    src.forEach((r,i)=>{
+      const f=`Fila ${i+2}`, id=r.id_carga?String(r.id_carga).trim().toUpperCase():null;
+      if(!r.fecha&&!r.id_maquina&&!r.litros) return;
+      if(id&&!/^CAR-\d{4,}$/.test(id)) return issues.push(`${f}: ID “${id}” no tiene el formato CAR-0001.`);
+      const fecha=toISO(r.fecha), eq=r.id_maquina&&String(r.id_maquina).trim().toUpperCase(), op=r.id_operador&&String(r.id_operador).trim().toUpperCase(), litros=nm(r.litros);
+      if(!fecha) return issues.push(`${f}: fecha no válida.`);
+      if(!S.eq.has(eq)) return issues.push(`${f}: el equipo ${eq||'(vacío)'} no existe.`);
+      if(!S.ops.has(op)) return issues.push(`${f}: el operador ${op||'(vacío)'} no existe.`);
+      if(!(litros>0)) return issues.push(`${f}: litros no válidos.`);
+      if(r.origen&&!ORIGENES.includes(r.origen)) return issues.push(`${f}: origen “${r.origen}” no reconocido.`);
+      if(r.centro&&!CENTROS.includes(r.centro)) return issues.push(`${f}: centro “${r.centro}” no existe.`);
+      rows.push({id_carga:id||gen(),fecha,id_maquina:eq,id_operador:op,litros,horometro:nm(r.horometro),estanque_lleno:r.estanque_lleno==null?false:yes(r.estanque_lleno),origen:r.origen||null,precio_litro:nm(r.precio_litro)==null?null:Math.round(nm(r.precio_litro)),centro:r.centro||null,observacion:r.observacion==null?null:String(r.observacion)});
+    });
+    table='combustible';conflict='id_carga';rows=dedupe(rows,r=>r.id_carga);
+  }else if(kind==='mantenciones'){
+    const src=sheetRows(wb,['mantenciones']);
+    if(!src){toast('No encontré la hoja “Mantenciones” en el archivo.');return}
+    const gen=nextIdGen('INT',[...S.mant.map(r=>r.id_intervencion),...src.map(r=>r.id_intervencion)]);
+    src.forEach((r,i)=>{
+      const f=`Fila ${i+2}`, id=r.id_intervencion?String(r.id_intervencion).trim().toUpperCase():null;
+      if(!r.fecha&&!r.id_maquina) return;
+      if(id&&!/^INT-\d{4,}$/.test(id)) return issues.push(`${f}: ID “${id}” no tiene el formato INT-0001.`);
+      const fecha=toISO(r.fecha), eq=r.id_maquina&&String(r.id_maquina).trim().toUpperCase(), horo=nm(r.horometro);
+      if(!fecha) return issues.push(`${f}: fecha no válida.`);
+      if(!S.eq.has(eq)) return issues.push(`${f}: el equipo ${eq||'(vacío)'} no existe.`);
+      if(!['Preventiva','Correctiva'].includes(r.tipo)) return issues.push(`${f}: tipo debe ser Preventiva o Correctiva.`);
+      if(r.tipo==='Preventiva'&&horo==null) return issues.push(`${f}: preventiva sin horómetro.`);
+      if(r.sistema&&!SISTEMAS.includes(r.sistema)) return issues.push(`${f}: sistema “${r.sistema}” no reconocido.`);
+      if(r.tipo_taller&&!['Interno','Externo'].includes(r.tipo_taller)) return issues.push(`${f}: taller debe ser Interno o Externo.`);
+      rows.push({id_intervencion:id||gen(),fecha,id_maquina:eq,tipo:r.tipo,sistema:r.sistema||null,descripcion:r.descripcion==null?null:String(r.descripcion),horometro:horo,costo_repuestos:Math.round(nm(r.costo_repuestos)||0),costo_mano_obra:Math.round(nm(r.costo_mano_obra)||0),proveedor:r.proveedor==null?null:String(r.proveedor),tipo_taller:r.tipo_taller||null,dias_fuera_servicio:nm(r.dias_fuera_servicio)});
+    });
+    table='mantenciones';conflict='id_intervencion';rows=dedupe(rows,r=>r.id_intervencion);
+  }else if(kind==='rebano'){
+    const src=sheetRows(wb,['conteos','rebano']);
+    if(!src){toast('No encontré la hoja “Conteos” en el archivo.');return}
+    src.forEach((r,i)=>{
+      const f=`Fila ${i+2}`;
+      if(!r.fecha&&!r.centro&&r.cantidad==null) return;
+      const fecha=toISO(r.fecha), cant=nm(r.cantidad), lote=r.lote==null?null:String(r.lote).trim().toUpperCase();
+      if(!fecha) return issues.push(`${f}: fecha no válida.`);
+      if(!CENTROS.includes(r.centro)) return issues.push(`${f}: centro “${r.centro??''}” no existe.`);
+      if(!lote) return issues.push(`${f}: falta el lote.`);
+      if(!ESTADOS_REB.includes(r.estado)) return issues.push(`${f}: estado “${r.estado??''}” no reconocido.`);
+      if(cant==null||cant<0||!Number.isInteger(cant)) return issues.push(`${f}: cantidad no válida.`);
+      rows.push({fecha,centro:r.centro,lote,estado:r.estado,cantidad:cant,observacion:r.observacion==null?null:String(r.observacion)});
+    });
+    table='rebano';conflict='fecha,centro,lote,estado';rows=dedupe(rows,r=>[r.fecha,r.centro,r.lote,r.estado].join('|'));
+  }else if(kind==='leche'){
+    const src=sheetRows(wb,['leche_normalizada','leche','por_sala'],true);
+    src.forEach((r0,i)=>{
+      const r={};for(const [k,v] of Object.entries(r0)) if(LECHE_COLS[k]) r[LECHE_COLS[k]]=v;
+      const f=`Fila ${i+2}`;
+      if(r.fecha==null&&r.sala==null) return;
+      const fecha=toISO(r.fecha), sala=normSala(r.sala);
+      if(!fecha) return issues.push(`${f}: fecha no válida.`);
+      if(!SALAS.includes(sala)) return issues.push(`${f}: sala “${r.sala??''}” no reconocida.`);
+      const o={fecha,sala,vo:nm(r.vo)==null?null:Math.round(nm(r.vo)),l_planta:nm(r.l_planta),l_descarte:nm(r.l_descarte),conc_kg:nm(r.conc_kg)};
+      if([o.vo,o.l_planta,o.l_descarte,o.conc_kg].every(v=>v==null)) return;
+      if([o.vo,o.l_planta,o.l_descarte,o.conc_kg].some(v=>v!=null&&v<0)) return issues.push(`${f}: valores negativos.`);
+      rows.push(o);
+    });
+    table='leche';conflict='fecha,sala';rows=dedupe(rows,r=>r.fecha+'|'+r.sala);
+  }
+  S.importKind=kind;S.importIssues=issues;
+  if(!rows.length){render();toast('No encontré filas válidas para importar.');return}
+  toast(`Importando ${fmt0(rows.length)} filas…`);
+  try{await upsert(table,rows,conflict)}
+  catch(e){toast(errMsg(e));await loadMod(kind);return}
+  toast(`${fmt0(rows.length)} filas importadas${issues.length?` · ${issues.length} omitidas`:''}`);
+  await afterWrite(kind==='combustible'||kind==='mantenciones'?['combustible','mantenciones','base']:kind==='leche'?['leche','rebano']:['rebano']);
+}
+/* Importación de la plantilla de maquinaria (equipos, documentos, operadores). */
+async function importXls(file){
+  if(typeof XLSX==='undefined'){toast('No se pudo cargar el lector de Excel. Recarga la página.');return}
+  let wb;try{wb=XLSX.read(await file.arrayBuffer(),{cellDates:true})}catch(e){toast('El archivo no se pudo leer como Excel.');return}
+  const sheet=n=>sheetRows(wb,[n])||[];
+  const issues=[];
+  const ops=[],opIds=new Set(S.ops.keys());
+  sheet('operadores').forEach((r,i)=>{
+    const id=r.id_operador&&String(r.id_operador).trim().toUpperCase();
+    if(!id) return;
+    if(!RE_OP.test(id)){issues.push(`Operadores fila ${i+2}: ID “${id}” no tiene el formato OP-01.`);return}
+    if(!r.nombre){issues.push(`Operadores fila ${i+2}: ${id} sin nombre.`);return}
+    if(r.centro&&!CENTROS.includes(String(r.centro))){issues.push(`Operadores fila ${i+2}: centro “${r.centro}” no existe.`);return}
+    ops.push({id_operador:id,nombre:String(r.nombre),centro:r.centro?String(r.centro):null,activo:yes(r.activo)});opIds.add(id);
+  });
+  const eqs=[],eqIds=new Set(S.eq.keys());let nE=0,uE=0;
+  sheet('equipos').forEach((r,i)=>{
+    const id=r.id_maquina&&String(r.id_maquina).trim().toUpperCase();
+    if(!id) return;
+    const f=`Equipos fila ${i+2} (${id})`;
+    if(!RE_EQ.test(id)){issues.push(`${f}: el ID no tiene el formato TR-30.`);return}
+    const prev=S.eq.get(id);
+    const e={...eqRow(prev||{}),id_maquina:id};
+    for(const c of EQ_COLS.slice(1)) if(r[c]!=null) e[c]=EQ_NUM.includes(c)?(isNaN(+r[c])?null:(c==='horometro_inicial'?Math.round(+r[c]*10)/10:Math.round(+r[c]))):String(r[c]);
+    if(!e.nombre){issues.push(`${f}: falta el nombre.`);return}
+    if(!TIPOS.includes(e.tipo)){issues.push(`${f}: tipo “${e.tipo??''}” no existe.`);return}
+    if(e.estado==null) e.estado='Activa';
+    if(!ESTADOS.includes(e.estado)){issues.push(`${f}: estado “${e.estado}” no existe.`);return}
+    if(e.centro&&!CENTROS.includes(e.centro)){issues.push(`${f}: centro “${e.centro}” no existe.`);return}
+    if(e.operador_asignado&&!opIds.has(e.operador_asignado)){issues.push(`${f}: el operador ${e.operador_asignado} no existe en Operadores.`);return}
+    prev?uE++:nE++;eqs.push(e);eqIds.add(id);
+  });
+  const docs=[];
+  sheet('documentos').forEach((r,i)=>{
+    const id=r.id_maquina&&String(r.id_maquina).trim().toUpperCase(); const dk=DOCS.find(([,n])=>key(n)===key(r.documento||''));
+    if(!id) return;
+    if(!dk){issues.push(`Documentos fila ${i+2}: documento “${r.documento??''}” no reconocido.`);return}
+    if(!eqIds.has(id)){issues.push(`Documentos fila ${i+2}: el equipo ${id} no existe.`);return}
+    const v=ym(r.vencimiento);
+    const sit=SITS.includes(r.situacion)?r.situacion:(v?'Con fecha':'Sin dato');
+    if(sit==='Con fecha'&&!v){issues.push(`Documentos fila ${i+2} (${id}): “Con fecha” sin mes de vencimiento.`);return}
+    docs.push(docRow({id_maquina:id,documento:dk[1],situacion:sit,vencimiento:sit==='Con fecha'?v:null,texto_original:r.texto_original==null?null:String(r.texto_original)}));
+  });
+  S.importKind='maquinaria';S.importIssues=issues;
+  if(!ops.length&&!eqs.length&&!docs.length){render();toast('No encontré hojas Equipos, Documentos u Operadores con datos válidos.');return}
+  toast('Importando…');
+  try{
+    await upsert('operadores',ops,'id_operador');
+    await upsert('equipos',eqs,'id_maquina');
+    await upsert('documentos',docs,'id_maquina,documento');
+  }catch(err){toast(errMsg(err));await load();return}
+  toast(`${nE} equipos nuevos · ${uE} actualizados · ${docs.length} documentos · ${ops.length} operadores${issues.length?` · ${issues.length} filas omitidas`:''}`);
+  await load();
+}
+
+/* ---------- eventos ---------- */
+document.addEventListener('click',ev=>{
+  const t=ev.target.closest('[data-mod],[data-tab],[data-tipo],[data-docf],[data-act],[data-open],[data-op],[data-rec],button[data-set]'); if(!t)return;
+  if(t.dataset.mod){S.mod=t.dataset.mod;S.open=null;S.rec=null;S.formErr='';render();return}
+  if(t.dataset.set&&t.tagName==='BUTTON'){const [o,k]=t.dataset.set.split('.');S[o][k]=t.dataset.val;render();return}
+  if(t.dataset.tab){S.tab=t.dataset.tab;S.formErr='';render();return}
+  if(t.dataset.tipo){S.tipo=t.dataset.tipo;render();return}
+  if(t.dataset.docf){S.docf=t.dataset.docf;render();return}
+  if(t.dataset.open){S.rec=null;S.open=t.dataset.open;S.formErr='';S.confirmDel=false;renderDrawer();return}
+  if(t.dataset.rec){openRec(t.dataset.rec,t.dataset.key);return}
+  if(t.dataset.op){S.opEdit=S.ops.get(t.dataset.op)||null;S.formErr='';render();return}
+  const a=t.dataset.act;
+  if(a==='close'){if(S.saving)return;if(S.rec){closeRec();return}S.open=null;S.formErr='';S.confirmDel=false;renderDrawer()}
+  else if(a==='new'){S.open='__new';S.formErr='';renderDrawer()}
+  else if(a==='save'){ev.preventDefault();saveEquipo()}
+  else if(a==='rec-new'){newRec(t.dataset.kind)}
+  else if(a==='rec-save'){ev.preventDefault();saveRec()}
+  else if(a==='del'){S.confirmDel=true;renderDrawer()}
+  else if(a==='del-no'){S.confirmDel=false;renderDrawer()}
+  else if(a==='del-yes'){deleteEquipo()}
+  else if(a==='rec-del-yes'){deleteRec()}
+  else if(a==='import'){S.importKind=t.dataset.kind;$('#xls').click()}
+  else if(a==='op-cancel'){S.opEdit=null;S.formErr='';render()}
+  else if(a==='reload'){S.loadErr='';render();load()}
+  else if(a==='reload-mod'){S.mods[t.dataset.kind].err='';loadMod(t.dataset.kind)}
+  else if(a==='issues-close'){S.importIssues=[];render()}
+  else if(a==='logout'){logout()}
+  else if(a==='lc-preset'){
+    const ms=[...new Set(S.leche.map(r=>r.fecha.slice(0,7)))].sort(),v=t.dataset.val;
+    if(v==='all'){S.lc.from=ms[0];S.lc.to=ms[ms.length-1]}
+    else if(v==='12'){S.lc.to=ms[ms.length-1];S.lc.from=ms[Math.max(0,ms.length-12)]}
+    else{const y=ms.filter(m=>m.startsWith(v));S.lc.from=y[0];S.lc.to=y[y.length-1]}
+    render();
+  }
+});
+document.addEventListener('keydown',ev=>{
+  if(ev.key==='Escape'&&(S.open||S.rec)&&!S.saving){if(S.rec)closeRec();else{S.open=null;S.confirmDel=false;renderDrawer()}return}
+  if(ev.key==='Enter'){const r=ev.target.closest('tr[data-open],tr[data-op],tr[data-rec]');if(r){r.click()}}
+});
+document.addEventListener('change',ev=>{
+  const el=ev.target;
+  if(el.id==='f-centro'){S.centro=el.value;render();return}
+  if(el.id==='xls'){const f=el.files[0];if(f){if(S.importKind==='maquinaria')importXls(f);else importReg(S.importKind,f)}el.value='';return}
+  if(el.dataset.set){const [o,k]=el.dataset.set.split('.');S[o][k]=el.value;if(o==='lc'&&k==='from'&&S.lc.to<el.value)S.lc.to=el.value;if(o==='lc'&&k==='to'&&S.lc.from>el.value)S.lc.from=el.value;render();return}
+  /* al cambiar el equipo o la fecha de un registro, se actualiza la última lectura de horómetro */
+  if(S.rec&&(el.id==='r-eq'||el.id==='r-fecha')&&(S.rec.kind==='comb'||S.rec.kind==='mant')){S.rec.data={...S.rec.data,...REC[S.rec.kind].read()};S.warn='';S.warnAck=false;renderDrawer()}
+});
+document.addEventListener('input',ev=>{
+  if(ev.target.id==='f-q'){S.q=ev.target.value;const pos=ev.target.selectionStart;renderEquipos([...S.eq.values()],false);const el=$('#f-q');el.focus();el.setSelectionRange(pos,pos)}
+  else if(S.rec&&S.warnAck&&ev.target.closest('#recform')){S.warnAck=false}
+});
+document.addEventListener('submit',async ev=>{
+  ev.preventDefault();
+  if(ev.target.id==='loginform'){login();return}
+  if(ev.target.id==='eqform'){saveEquipo();return}
+  if(ev.target.id==='recform'){saveRec();return}
+  if(ev.target.id!=='opform'||S.saving)return;
+  const id=(val('op-id')||'').toUpperCase(),nombre=val('op-nombre');
+  if(!RE_OP.test(id)){S.formErr='Escribe un ID con el formato OP-01.';render();return}
+  if(!nombre){S.formErr='Escribe el nombre del operador.';render();return}
+  if(!S.opEdit&&S.ops.has(id)){S.formErr=`Ya existe el operador ${id}.`;render();return}
+  S.saving=true;
+  try{await upsert('operadores',[opRow({id_operador:id,nombre,centro:val('op-centro'),activo:val('op-activo')||'Sí'})],'id_operador');S.opEdit=null;S.formErr='';toast(`Operador ${id} guardado`);S.saving=false;await load()}
+  catch(err){S.saving=false;S.formErr=errMsg(err);render()}
+});
+/* Al volver a la pestaña, trae los cambios que hayan hecho otras personas. */
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden||!S.user||S.open||S.rec) return;
+  if(Date.now()-S.loadedAt>30000) load();
+  const m=S.mods[S.mod];if(m&&m.loaded&&Date.now()-(m.at||0)>30000) loadMod(S.mod);
+});
+
+if(!sb){
+  document.body.innerHTML='<div class="ph" style="padding:0 16px"><h2>No se pudo cargar Torre de Control Agrícola</h2><p>Falta la conexión con el servidor. Revisa internet y recarga la página.</p></div>';
+}else{
+  sb.auth.onAuthStateChange((event,session)=>{
+    const u=session?session.user:null;
+    const changed=(u&&u.id)!==(S.user&&S.user.id);
+    S.user=u;S.authReady=true;
+    if(changed){clearData();if(u)setTimeout(load,0)}
+    showAuth();
+  });
+}
+</script>
+</body>
+</html>
