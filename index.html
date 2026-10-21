@@ -257,6 +257,19 @@ const SISTEMAS=['Motor','Hidráulico','Transmisión','Neumáticos','Eléctrico',
 const ESTADOS_REB=['En ordeña','Seca','Vaquilla','Ternera','Toro','Otro'];
 const PERIODOS=[['30','30 días'],['90','90 días'],['365','12 meses'],['all','Todo']];
 const PROXIMA_H=50;   // horas para marcar una preventiva como "próxima"
+/* Columnas del registro diario de leche (planilla por sala). */
+const LECHE_NUM=['vo','vo_l1','vo_l2','vo_l3','l_planta','l_descarte','l_terneros','l_personal','conc_sala_kg','conc_carro_kg','conc_kg','conc_merma_kg','conc_ingreso_kg','conc_stock_kg','mg','proteina','solidos','rcs','ufc','urea'];
+const LECHE_TXT=['conc_ingreso_detalle','observacion'];
+const LECHE_INT=['vo','vo_l1','vo_l2','vo_l3'];
+const LECHE_NONNEG=['vo','vo_l1','vo_l2','vo_l3','l_planta','l_descarte','l_terneros','l_personal','conc_sala_kg','conc_carro_kg','conc_kg'];
+const CALIDAD=[['mg','MG %',2],['proteina','Proteína %',2],['solidos','Sólidos %',2],['rcs','RCS',0],['ufc','UFC',0],['urea','Urea',1]];
+const METRICAS={
+  litros:{t:'Litros totales por día (promedio mensual)',u:'L',dec:0},
+  vo:{t:'Vacas en ordeña (promedio mensual)',u:'vacas',dec:0},
+  lvo:{t:'Litros por vaca (promedio mensual)',u:'L/vaca',dec:1},
+  conc:{t:'Concentrado por día (promedio mensual, kg)',u:'kg',dec:0},
+  grl:{t:'Gramos de concentrado por litro (mensual)',u:'g/L',dec:0}
+};
 
 let TIPOS=TIPO_ORDEN.slice(), SIN_HORAS=new Set(['Remolque']);
 
@@ -266,7 +279,7 @@ const S={mod:'maquinaria',tab:'equipos',q:'',tipo:'Todos',centro:'Todos',docf:'P
   comb:[],mant:[],reb:[],control:[],leche:[],consumo:new Map(),costo:new Map(),
   mods:{combustible:{},mantenciones:{},rebano:{},leche:{}},
   cb:{tab:'cargas',per:'90',eq:'Todos'},mt:{tab:'intervenciones',per:'365',eq:'Todos',tipo:'Todos'},
-  rb:{tab:'ultimo',centro:'Todos'},lc:{sala:'Todos',from:'',to:''},
+  rb:{tab:'ultimo',centro:'Todos'},lc:{sala:'Todos',from:'',to:'',met:'litros'},
   open:null,rec:null,confirmDel:false,formErr:'',warn:'',warnAck:false,opEdit:null,saving:false,importIssues:[],importKind:null};
 
 const $=s=>document.querySelector(s);
@@ -421,7 +434,7 @@ const MOD_LOAD={
     const [r,c]=await Promise.all([fetchAll('rebano','*',['fecha','centro','lote','estado']),fetchAll('v_rebano_vs_leche','*',['fecha','centro'])]);
     S.reb=r;S.control=c;
   },
-  leche:async()=>{S.leche=await fetchAll('leche','fecha,sala,vo,l_planta,l_descarte,conc_kg',['fecha','sala'])}
+  leche:async()=>{S.leche=await fetchAll('leche',['fecha','sala',...LECHE_NUM,...LECHE_TXT].join(','),['fecha','sala'])}
 };
 async function loadMod(m){
   const st=S.mods[m];
@@ -775,7 +788,9 @@ function renderReb(){
 }
 
 /* ================= Leche ================= */
-const lTot=r=>(r.l_planta==null&&r.l_descarte==null)?null:(+r.l_planta||0)+(+r.l_descarte||0);
+/* Litros totales del día = planta (estanque) + descarte + terneros + personal. */
+const L_PARTES=['l_planta','l_descarte','l_terneros','l_personal'];
+const lTot=r=>L_PARTES.every(k=>r[k]==null)?null:L_PARTES.reduce((a,k)=>a+(+r[k]||0),0);
 function byDay(rows){
   const m=new Map();
   for(const r of rows){
@@ -783,6 +798,17 @@ function byDay(rows){
     g.vo+=+r.vo||0;const t=lTot(r);if(t!=null){g.lt+=t;g.hasL=true}g.conc+=+r.conc_kg||0;m.set(r.fecha,g);
   }
   return [...m.values()];
+}
+/* Valor mensual de una métrica para un grupo de registros (una sala, un mes). */
+function metricaMes(rows,met){
+  let lt=0,dl=0,vo=0,dv=0,cc=0,dc=0,lv=0,vv=0,gl=0,gc=0;
+  for(const r of rows){
+    const t=lTot(r),v=r.vo==null?null:+r.vo,c=r.conc_kg==null?null:+r.conc_kg;
+    if(t!=null){lt+=t;dl++}
+    if(v!=null&&v>0){vo+=v;dv++;if(t!=null){lv+=t;vv+=v}}
+    if(c!=null){cc+=c;dc++;if(t>0){gc+=c;gl+=t}}
+  }
+  return met==='litros'?(dl?lt/dl:null):met==='vo'?(dv?vo/dv:null):met==='lvo'?(vv?lv/vv:null):met==='conc'?(dc?cc/dc:null):(gl?gc*1000/gl:null);
 }
 function lecheKpis(rows){
   const d=byDay(rows);if(!d.length) return null;
@@ -836,31 +862,34 @@ function renderLeche(){
     ${stat(L(fmt0(k?.grl))+'<small>g/L</small>','Concentrado por litro')}
   </div>
   <div class="panel">
-    <h3>Producción diaria promedio por mes (litros)</h3>
+    <div class="period" style="margin-bottom:8px"><h3 style="margin:0">${METRICAS[S.lc.met].t}</h3>
+      <div class="actions">${[['litros','Litros'],['vo','Vacas'],['lvo','L/vaca'],['conc','Concentrado'],['grl','g/L']].map(([k,l])=>`<button class="chip" data-set="lc.met" data-val="${k}" aria-pressed="${S.lc.met===k}">${l}</button>`).join('')}</div></div>
     <div class="legend">${salasData.map(s=>`<span style="${sala!=='Todos'&&sala!==s?'opacity:.45':''}"><i class="sw" style="background:${salaColor(s)}"></i>${s}</span>`).join('')}</div>
     <div class="chartwrap" id="lc-chart"></div>
   </div>
   <div class="two">
-    <div class="panel"><h3>Producción diaria promedio por sala (L)</h3><div class="hbars" id="lc-bar1"></div></div>
-    <div class="panel"><h3>Litros por vaca promedio por sala</h3><div class="hbars" id="lc-bar2"></div></div>
+    <div class="panel"><h3>Litros totales por día, promedio por sala</h3><div class="hbars" id="lc-bar1"></div></div>
+    <div class="panel"><h3>Litros por vaca, promedio por sala</h3><div class="hbars" id="lc-bar2"></div></div>
   </div>
+  ${concPanel(win)}
+  ${calidadPanel(win)}
   <div class="card"><div class="tablewrap">
-    <table><thead><tr><th>Fecha</th><th>Sala</th><th class="num">VO</th><th class="num">L planta</th><th class="num">L descarte</th><th class="num">L total</th><th class="num">L/vaca</th><th class="num">Conc. kg</th></tr></thead><tbody>
+    <table><thead><tr><th>Fecha</th><th>Sala</th><th class="num">VO</th><th class="num">Planta</th><th class="num">Descarte</th><th class="num">Terneros</th><th class="num">Personal</th><th class="num">L total</th><th class="num">L/vaca</th><th class="num">Conc. kg</th><th>Observación</th></tr></thead><tbody>
     ${sel.slice().sort((a,b)=>b.fecha.localeCompare(a.fecha)||SALAS.indexOf(a.sala)-SALAS.indexOf(b.sala)).slice(0,60).map(r=>{const t=lTot(r);return `<tr data-rec="leche" data-key="${esc(r.fecha+'|'+r.sala)}" tabindex="0">
       <td class="num" style="text-align:left">${esc(r.fecha)}</td><td><span class="sq" style="background:${salaColor(r.sala)}"></span> ${esc(r.sala)}</td>
-      <td class="num">${fmt0(r.vo)}</td><td class="num">${fmt0(r.l_planta)}</td><td class="num">${fmt0(r.l_descarte)}</td><td class="num"><b>${fmt0(t)}</b></td>
-      <td class="num">${t!=null&&+r.vo>0?fmt1(t/r.vo):'—'}</td><td class="num">${fmt0(r.conc_kg)}</td></tr>`}).join('')}
+      <td class="num">${fmt0(r.vo)}</td><td class="num">${fmt0(r.l_planta)}</td><td class="num">${fmt0(r.l_descarte)}</td><td class="num">${fmt0(r.l_terneros)}</td><td class="num">${fmt0(r.l_personal)}</td><td class="num"><b>${fmt0(t)}</b></td>
+      <td class="num">${t!=null&&+r.vo>0?fmt1(t/r.vo):'—'}</td><td class="num">${fmt0(r.conc_kg)}</td><td class="muted clip" title="${esc(r.observacion)}">${esc(r.observacion||'')}</td></tr>`}).join('')}
     </tbody></table></div></div>
-  <p class="note">La tabla muestra los 60 registros más recientes del período. Litros totales = planta + descarte.</p>`}`;
+  <p class="note">La tabla muestra los 60 registros más recientes del período. Litros totales = planta (estanque) + descarte + terneros + personal.</p>`}`;
   if(ok&&all.length) drawLeche(win,months.filter(m=>m>=from&&m<=to),salasData);
 }
 function drawLeche(win,months,salas){
-  const sala=S.lc.sala;
-  /* promedio mensual de litros diarios por sala */
-  const agg=new Map();
-  for(const r of win){const t=lTot(r);if(t==null)continue;const k=r.sala+'|'+r.fecha.slice(0,7);const g=agg.get(k)||{s:0,n:0};g.s+=t;g.n++;agg.set(k,g)}
-  const series=salas.map(s=>({sala:s,pts:months.map(m=>{const g=agg.get(s+'|'+m);return g?g.s/g.n:null})}));
-  lineChart($('#lc-chart'),months,series,sala);
+  const sala=S.lc.sala, met=S.lc.met;
+  /* valor mensual de la métrica elegida, por sala */
+  const grp=new Map();
+  for(const r of win){const k=r.sala+'|'+r.fecha.slice(0,7);(grp.get(k)||grp.set(k,[]).get(k)).push(r)}
+  const series=salas.map(s=>({sala:s,pts:months.map(m=>{const g=grp.get(s+'|'+m);return g?metricaMes(g,met):null})}));
+  lineChart($('#lc-chart'),months,series,sala,METRICAS[met]);
   /* barras por sala */
   const per=salas.map(s=>{const k=lecheKpis(win.filter(r=>r.sala===s));return {s,prod:k?.prod,lv:k?.lvaca}});
   const bars=(el,f,dec)=>{const mx=Math.max(...per.map(p=>p[f]||0),1);el.innerHTML=per.slice().sort((a,b)=>(b[f]||0)-(a[f]||0)).map(p=>`<div class="hb ${sala!=='Todos'&&sala!==p.s?'dim':''}" title="${esc(p.s)}: ${dec?fmt1(p[f]):fmt0(p[f])}">
@@ -870,15 +899,45 @@ function drawLeche(win,months,salas){
   bars($('#lc-bar1'),'prod',false);bars($('#lc-bar2'),'lv',true);
 }
 /* Gráfico de líneas en SVG: grilla fina, líneas de 2 px, cursor con detalle por sala. */
-function lineChart(el,months,series,sel){
+/* Concentrado por sala en el período: consumo, eficiencia, ingresos a bodega y stock al cierre. */
+function concPanel(win){
+  const rows=SALAS.map(s=>{
+    const rs=win.filter(r=>r.sala===s).sort((a,b)=>a.fecha.localeCompare(b.fecha));
+    if(!rs.length) return null;
+    const conDia=rs.filter(r=>r.conc_kg!=null);
+    const vo=rs.filter(r=>r.conc_kg!=null&&+r.vo>0);
+    const stock=[...rs].reverse().find(r=>r.conc_stock_kg!=null);
+    return {s,dia:conDia.length?sum(conDia,'conc_kg')/conDia.length:null,
+      kgvo:vo.length?sum(vo,'conc_kg')/sum(vo,'vo'):null,grl:metricaMes(rs,'grl'),
+      ing:sum(rs,'conc_ingreso_kg'),merma:sum(rs,'conc_merma_kg'),stock};
+  }).filter(Boolean);
+  if(!rows.some(r=>r.dia!=null)) return '';
+  return `<div class="panel"><h3>Concentrado por sala en el período</h3><div class="tablewrap"><table>
+    <thead><tr><th>Sala</th><th class="num">kg por día</th><th class="num">kg por vaca</th><th class="num">g por litro</th><th class="num">Ingresos a bodega (kg)</th><th class="num">Merma (kg)</th><th class="num">Stock al cierre (kg)</th></tr></thead><tbody>
+    ${rows.map(r=>`<tr><td><span class="sq" style="background:${salaColor(r.s)}"></span> ${esc(r.s)}</td><td class="num">${fmt0(r.dia)}</td><td class="num">${fmt1(r.kgvo)}</td><td class="num">${fmt0(r.grl)}</td>
+      <td class="num">${r.ing?fmt0(r.ing):'—'}</td><td class="num">${r.merma?fmt0(r.merma):'—'}</td>
+      <td class="num">${r.stock?`<span class="${+r.stock.conc_stock_kg<0?'bad':''}" title="al ${esc(r.stock.fecha)}">${fmt0(r.stock.conc_stock_kg)}</span>`:'—'}</td></tr>`).join('')}
+    </tbody></table></div><p class="note">Stock negativo = la planilla registró más consumo que ingresos a la bodega de esa sala; conviene revisar los ingresos.</p></div>`;
+}
+/* Calidad de leche (MG, proteína, sólidos, RCS, UFC, urea): solo si el período trae esos datos. */
+function calidadPanel(win){
+  const rows=SALAS.map(s=>{const rs=win.filter(r=>r.sala===s);const v={};for(const [k] of CALIDAD){const x=rs.filter(r=>r[k]!=null&&+r[k]>0);v[k]=x.length?sum(x,k)/x.length:null}return {s,v}}).filter(r=>CALIDAD.some(([k])=>r.v[k]!=null));
+  if(!rows.length) return '';
+  return `<div class="panel"><h3>Calidad de leche (promedio del período)</h3><div class="tablewrap"><table>
+    <thead><tr><th>Sala</th>${CALIDAD.map(([,l])=>`<th class="num">${l}</th>`).join('')}</tr></thead><tbody>
+    ${rows.map(r=>`<tr><td><span class="sq" style="background:${salaColor(r.s)}"></span> ${esc(r.s)}</td>${CALIDAD.map(([k,,d])=>`<td class="num">${r.v[k]==null?'—':d?new Intl.NumberFormat('es-CL',{minimumFractionDigits:d,maximumFractionDigits:d}).format(r.v[k]):fmt0(r.v[k])}</td>`).join('')}</tr>`).join('')}
+    </tbody></table></div></div>`;
+}
+function lineChart(el,months,series,sel,M={u:'L',dec:0}){
+  const fv=v=>M.dec?fmt1(v):fmt0(v);
   const W=Math.max(300,el.clientWidth),H=280,m={l:52,r:16,t:10,b:28};
   const iw=W-m.l-m.r,ih=H-m.t-m.b,n=months.length;
   const vals=series.flatMap(s=>s.pts).filter(v=>v!=null);
-  if(!vals.length){el.innerHTML='<div class="empty">No hay litros registrados en este período.</div>';return}
+  if(!vals.length){el.innerHTML='<div class="empty">No hay datos de este indicador en el período.</div>';return}
   const step=niceStep(Math.max(...vals)/4),top=Math.ceil(Math.max(...vals)/step)*step||step;
   const x=i=>m.l+(n<=1?iw/2:i*iw/(n-1)),y=v=>m.t+ih-(v/top)*ih;
   let g='';
-  for(let v=0;v<=top+1e-9;v+=step) g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${y(v)}" y2="${y(v)}" style="stroke:var(${v===0?'--line-strong':'--grid'})" stroke-width="1"/><text x="${m.l-8}" y="${y(v)+4}" text-anchor="end">${nf0.format(v)}</text>`;
+  for(let v=0;v<=top+1e-9;v+=step) g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${y(v)}" y2="${y(v)}" style="stroke:var(${v===0?'--line-strong':'--grid'})" stroke-width="1"/><text x="${m.l-8}" y="${y(v)+4}" text-anchor="end">${nf.format(v)}</text>`;
   const every=Math.max(1,Math.ceil(n/Math.max(1,Math.floor(iw/62))));
   months.forEach((mo,i)=>{if(i%every===0||i===n-1&&n-1-((n-1)-(n-1)%every)>=every/2) g+=`<text x="${x(i)}" y="${H-8}" text-anchor="middle">${MES[+mo.slice(5,7)-1]} ${mo.slice(2,4)}</text>`});
   const path=pts=>{let d='',pen=false;pts.forEach((v,i)=>{if(v==null){pen=false;return}d+=(pen?'L':'M')+x(i).toFixed(1)+' '+y(v).toFixed(1);pen=true});return d};
@@ -889,7 +948,7 @@ function lineChart(el,months,series,sel){
     /* puntos sueltos (un mes sin vecinos) */
     s.pts.forEach((v,i)=>{if(v!=null&&s.pts[i-1]==null&&s.pts[i+1]==null) g+=`<circle cx="${x(i)}" cy="${y(v)}" r="3" style="fill:${on?salaColor(s.sala):'var(--line-strong)'}"/>`});
   }
-  el.innerHTML=`<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Producción diaria promedio por mes y sala">${g}<g id="lc-hover"></g><rect x="${m.l}" y="${m.t}" width="${iw}" height="${ih}" fill="transparent" id="lc-hit"/></svg><div class="tip" id="lc-tip" hidden></div>`;
+  el.innerHTML=`<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(M.t||'Gráfico por mes y sala')}">${g}<g id="lc-hover"></g><rect x="${m.l}" y="${m.t}" width="${iw}" height="${ih}" fill="transparent" id="lc-hit"/></svg><div class="tip" id="lc-tip" hidden></div>`;
   const hit=el.querySelector('#lc-hit'),hov=el.querySelector('#lc-hover'),tip=el.querySelector('#lc-tip');
   const show=ev=>{
     const r=el.getBoundingClientRect(),mx=ev.clientX-r.left;
@@ -897,7 +956,7 @@ function lineChart(el,months,series,sel){
     const vis=series.filter(s=>s.pts[i]!=null&&(sel==='Todos'||s.sala===sel)).sort((a,b)=>b.pts[i]-a.pts[i]);
     hov.innerHTML=`<line x1="${x(i)}" x2="${x(i)}" y1="${m.t}" y2="${m.t+ih}" style="stroke:var(--line-strong)" stroke-width="1"/>`+
       vis.map(s=>`<circle cx="${x(i)}" cy="${y(s.pts[i])}" r="4.5" style="fill:${salaColor(s.sala)};stroke:var(--surface)" stroke-width="2"/>`).join('');
-    tip.innerHTML=`<b>${fmtYm(months[i])}</b>`+(vis.length?vis.map(s=>`<div><i class="sw" style="background:${salaColor(s.sala)}"></i>${esc(s.sala)}<span class="v">${fmt0(s.pts[i])} L</span></div>`).join(''):'<div class="muted">Sin datos este mes</div>');
+    tip.innerHTML=`<b>${fmtYm(months[i])}</b>`+(vis.length?vis.map(s=>`<div><i class="sw" style="background:${salaColor(s.sala)}"></i>${esc(s.sala)}<span class="v">${fv(s.pts[i])} ${M.u}</span></div>`).join(''):'<div class="muted">Sin datos este mes</div>');
     tip.hidden=false;
     const tw=tip.offsetWidth,left=x(i)+14+tw>W?x(i)-14-tw:x(i)+14;
     tip.style.left=Math.max(0,left)+'px';tip.style.top=(m.t+4)+'px';
@@ -1126,24 +1185,53 @@ const REC={
     sub:(r,n)=>n?'Leche':r.fecha,
     body(r,n){
       const t=lTot(r);
-      return `<fieldset><legend>Registro diario</legend>
+      const num=(id,label,k)=>fld(id,label,r[k],{type:'number'});
+      return `<fieldset><legend>Día y sala</legend>
         ${fld('r-fecha','Fecha',r.fecha,{type:'date',ro:!n})}
         ${fld('r-sala','Sala',null,{list:opt(SALAS,r.sala),ro:!n})}
-        ${fld('r-vo','Vacas en ordeña (VO)',r.vo,{type:'number'})}
-        ${fld('r-conc','Concentrado (kg)',r.conc_kg,{type:'number'})}
-        ${fld('r-lp','Litros a planta',r.l_planta,{type:'number'})}
-        ${fld('r-ld','Litros de descarte',r.l_descarte,{type:'number'})}
         ${n?'':`<div class="calc"><span>Litros totales <b>${fmt0(t)}</b></span><span>L/vaca <b>${t!=null&&+r.vo>0?fmt1(t/r.vo):'—'}</b></span><span>g/L <b>${t>0&&r.conc_kg!=null?fmt0(r.conc_kg*1000/t):'—'}</b></span></div>`}
-      </fieldset>`;
+      </fieldset>
+      <fieldset><legend>Litros</legend>
+        ${num('r-lp','Estanque (a planta)','l_planta')}${num('r-ld','Descarte','l_descarte')}
+        ${num('r-lt','Terneros','l_terneros')}${num('r-lpe','Personal','l_personal')}
+      </fieldset>
+      <fieldset><legend>Vacas en ordeña</legend>
+        ${num('r-vo','VO total','vo')}
+        <div class="grid3">${num('r-l1','Lote 1','vo_l1')}${num('r-l2','Lote 2','vo_l2')}${num('r-l3','Lote 3','vo_l3')}</div>
+      </fieldset>
+      <fieldset><legend>Concentrado (kg)</legend>
+        ${num('r-cs','Sala','conc_sala_kg')}${num('r-cc','Carro','conc_carro_kg')}
+        ${num('r-conc','Total consumido','conc_kg')}${num('r-cm','Merma','conc_merma_kg')}
+        ${num('r-ci','Ingreso a bodega','conc_ingreso_kg')}${num('r-cst','Stock en bodega','conc_stock_kg')}
+        ${fld('r-cid','Detalle del ingreso',r.conc_ingreso_detalle,{wide:true})}
+      </fieldset>
+      <fieldset><legend>Calidad de leche (opcional)</legend>
+        <div class="grid3">${CALIDAD.map(([k,l])=>num('r-q-'+k,l,k)).join('')}</div>
+      </fieldset>
+      ${fld('r-obs','Observación',r.observacion,{wide:true,ph:'Traslado de vacas, venta, corte de luz…'})}
+      <p class="note" style="margin:0">Si dejas vacío el total de concentrado, se calcula como sala + carro.</p>`;
     },
-    read:()=>({fecha:val('r-fecha'),sala:val('r-sala'),vo:numv('r-vo'),l_planta:numv('r-lp',1),l_descarte:numv('r-ld',1),conc_kg:numv('r-conc',1)}),
+    read(){
+      const r={fecha:val('r-fecha'),sala:val('r-sala'),l_planta:numv('r-lp',1),l_descarte:numv('r-ld',1),l_terneros:numv('r-lt',1),l_personal:numv('r-lpe',1),
+        vo:numv('r-vo'),vo_l1:numv('r-l1'),vo_l2:numv('r-l2'),vo_l3:numv('r-l3'),
+        conc_sala_kg:numv('r-cs',1),conc_carro_kg:numv('r-cc',1),conc_kg:numv('r-conc',1),conc_merma_kg:numv('r-cm',1),conc_ingreso_kg:numv('r-ci',1),conc_stock_kg:numv('r-cst',1),
+        conc_ingreso_detalle:val('r-cid'),observacion:val('r-obs')};
+      for(const [k,,d] of CALIDAD) r[k]=numv('r-q-'+k,Math.max(d,1));
+      if(r.conc_kg==null&&(r.conc_sala_kg!=null||r.conc_carro_kg!=null)) r.conc_kg=(r.conc_sala_kg||0)+(r.conc_carro_kg||0);
+      return r;
+    },
     check(r,n){
       if(!r.fecha||!r.sala) return 'Indica la fecha y la sala.';
-      if([r.vo,r.l_planta,r.l_descarte,r.conc_kg].every(v=>v==null)) return 'Anota al menos un valor.';
-      if([r.vo,r.l_planta,r.l_descarte,r.conc_kg].some(v=>v!=null&&v<0)) return 'Los valores no pueden ser negativos.';
+      if([r.vo,...L_PARTES.map(k=>r[k]),r.conc_kg].every(v=>v==null)) return 'Anota al menos los litros, las vacas o el concentrado.';
+      if(LECHE_NONNEG.some(k=>r[k]!=null&&r[k]<0)) return 'Litros, vacas y consumo de concentrado no pueden ser negativos.';
       if(n&&S.leche.some(x=>x.fecha===r.fecha&&x.sala===r.sala)) return 'Ya hay un registro para esa fecha y sala. Ábrelo desde la tabla para corregirlo.';
     },
-    warn(r){const t=(r.l_planta||0)+(r.l_descarte||0);if(r.vo>0&&t/r.vo>60)return `Son ${fmt1(t/r.vo)} litros por vaca, un valor muy alto. Revisa VO y litros, o pulsa “Guardar igual”.`;return ''},
+    warn(r){
+      const t=lTot(r)||0,l=[r.vo_l1,r.vo_l2,r.vo_l3].filter(v=>v!=null);
+      if(r.vo>0&&t/r.vo>60) return `Son ${fmt1(t/r.vo)} litros por vaca, un valor muy alto. Revisa VO y litros, o pulsa “Guardar igual”.`;
+      if(l.length&&r.vo!=null&&l.reduce((a,b)=>a+b,0)!==r.vo) return `La suma de los lotes (${l.reduce((a,b)=>a+b,0)}) no coincide con el VO total (${r.vo}). Revisa, o pulsa “Guardar igual”.`;
+      return '';
+    },
     async save(r){await upsert('leche',[r],'fecha,sala')},
     async del(key){const [fecha,sala]=key.split('|');await must(sb.from('leche').delete().match({fecha,sala}))},
     done:'Registro guardado',after:['leche','rebano']
@@ -1232,7 +1320,8 @@ function toISO(v){
 const nm=v=>{if(v==null||v==='')return null;if(typeof v==='number')return v;const s=String(v).trim();const n=+(s.includes(',')?s.replace(/\./g,'').replace(',','.'):s);return isNaN(n)?null:n};
 const SALA_NORM={'PICHIJUAN':'PICHI JUAN','PICHI JUAN':'PICHI JUAN','MELIES':'LOS MELIES','LOS MELIES':'LOS MELIES','S JORGE':'S JORGE','SAN JORGE':'S JORGE','S SEBAST':'S SEBAST','S SEBAST.':'S SEBAST','SAN SEBASTIAN':'S SEBAST','S SEBASTIAN':'S SEBAST','COPIHUE':'COPIHUE'};
 const normSala=s=>s==null?null:(SALA_NORM[String(s).trim().toUpperCase().replace(/\s+/g,' ')]||String(s).trim().toUpperCase());
-const LECHE_COLS={fecha:'fecha',date:'fecha',sala:'sala',centro:'sala',vo:'vo',vacas:'vo',vacas_ordena:'vo',vacas_en_ordena:'vo',l_planta:'l_planta',l_estanque:'l_planta',litros_planta:'l_planta',estanque:'l_planta',l_descarte:'l_descarte',descarte:'l_descarte',conc_kg:'conc_kg',conc:'conc_kg',concentrado:'conc_kg',kg_conc:'conc_kg'};
+const LECHE_COLS={fecha:'fecha',date:'fecha',sala:'sala',centro:'sala',vacas:'vo',vacas_ordena:'vo',vacas_en_ordena:'vo',l_estanque:'l_planta',litros_planta:'l_planta',estanque:'l_planta',descarte:'l_descarte',terneros:'l_terneros',personal:'l_personal',conc:'conc_kg',concentrado:'conc_kg',kg_conc:'conc_kg',
+  ...Object.fromEntries([...LECHE_NUM,...LECHE_TXT].map(k=>[k,k]))};
 function sheetRows(wb,names,fallbackFirst){
   let s=wb.SheetNames.find(x=>names.includes(key(x)));
   if(!s&&fallbackFirst) s=wb.SheetNames.find(x=>/leche|normal|datos/i.test(x))||wb.SheetNames[0];
@@ -1297,7 +1386,7 @@ async function importReg(kind,file){
     });
     table='rebano';conflict='fecha,centro,lote,estado';rows=dedupe(rows,r=>[r.fecha,r.centro,r.lote,r.estado].join('|'));
   }else if(kind==='leche'){
-    const src=sheetRows(wb,['leche_normalizada','leche','por_sala'],true);
+    const src=sheetRows(wb,['leche_diaria','leche_normalizada','leche','por_sala'],true);
     src.forEach((r0,i)=>{
       const r={};for(const [k,v] of Object.entries(r0)) if(LECHE_COLS[k]) r[LECHE_COLS[k]]=v;
       const f=`Fila ${i+2}`;
@@ -1305,9 +1394,13 @@ async function importReg(kind,file){
       const fecha=toISO(r.fecha), sala=normSala(r.sala);
       if(!fecha) return issues.push(`${f}: fecha no válida.`);
       if(!SALAS.includes(sala)) return issues.push(`${f}: sala “${r.sala??''}” no reconocida.`);
-      const o={fecha,sala,vo:nm(r.vo)==null?null:Math.round(nm(r.vo)),l_planta:nm(r.l_planta),l_descarte:nm(r.l_descarte),conc_kg:nm(r.conc_kg)};
-      if([o.vo,o.l_planta,o.l_descarte,o.conc_kg].every(v=>v==null)) return;
-      if([o.vo,o.l_planta,o.l_descarte,o.conc_kg].some(v=>v!=null&&v<0)) return issues.push(`${f}: valores negativos.`);
+      const o={fecha,sala};
+      for(const k of LECHE_NUM){let v=nm(r[k]);if(v!=null&&LECHE_INT.includes(k))v=Math.round(v);o[k]=v}
+      for(const k of LECHE_TXT) o[k]=r[k]==null?null:String(r[k]);
+      if(o.conc_kg==null&&(o.conc_sala_kg!=null||o.conc_carro_kg!=null)) o.conc_kg=(o.conc_sala_kg||0)+(o.conc_carro_kg||0);
+      if([o.vo,...L_PARTES.map(k=>o[k]),o.conc_kg].every(v=>v==null)) return;
+      const neg=LECHE_NONNEG.filter(k=>o[k]!=null&&o[k]<0);
+      if(neg.length) return issues.push(`${f} (${fecha} ${sala}): valor negativo en ${neg.join(', ')}.`);
       rows.push(o);
     });
     table='leche';conflict='fecha,sala';rows=dedupe(rows,r=>r.fecha+'|'+r.sala);
