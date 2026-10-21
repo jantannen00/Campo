@@ -262,7 +262,8 @@ const LECHE_NUM=['vo','vo_l1','vo_l2','vo_l3','l_planta','l_descarte','l_ternero
 const LECHE_TXT=['conc_ingreso_detalle','observacion'];
 const LECHE_INT=['vo','vo_l1','vo_l2','vo_l3'];
 const LECHE_NONNEG=['vo','vo_l1','vo_l2','vo_l3','l_planta','l_descarte','l_terneros','l_personal','conc_sala_kg','conc_carro_kg','conc_kg'];
-const CALIDAD=[['mg','MG %',2],['proteina','Proteína %',2],['solidos','Sólidos %',2],['rcs','RCS',0],['ufc','UFC',0],['urea','Urea',1]];
+/* Calidad de leche tal como viene en la planilla: MG, proteína y sólidos en g/kg (44 g/kg = 4,4 %); RCS en células/mL; UFC por mL. */
+const CALIDAD=[['mg','MG (g/kg)',1],['proteina','Proteína (g/kg)',1],['solidos','Sólidos (g/kg)',1],['rcs','RCS (cél/mL)',0],['ufc','UFC (/mL)',0],['urea','Urea',1]];
 const METRICAS={
   litros:{t:'Litros totales por día (promedio mensual)',u:'L',dec:0},
   vo:{t:'Vacas en ordeña (promedio mensual)',u:'vacas',dec:0},
