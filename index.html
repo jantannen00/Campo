@@ -160,6 +160,9 @@ legend{font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(
 label.f{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);min-width:0}
 label.f.wide{grid-column:1/-1}
 label.f .field{color:var(--fg);font-size:13.5px;width:100%}
+textarea.field{min-height:72px;resize:vertical;font:inherit;font-size:13.5px}
+.drop{grid-column:1/-1;border:1.5px dashed var(--line-strong);border-radius:10px;padding:14px;background:var(--sunk);display:flex;flex-direction:column;gap:6px;font-size:13px}
+.ok{color:var(--ok)}
 .need .field{border-color:var(--warn)}
 .calc{grid-column:1/-1;background:var(--sunk);border-radius:9px;padding:10px 12px;font-size:13px;display:flex;gap:18px;flex-wrap:wrap}
 .calc b{font-family:var(--mono);font-weight:500}
@@ -224,6 +227,7 @@ label.f .field{color:var(--fg);font-size:13.5px;width:100%}
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
 /* Conexión. La clave publicable puede ir en el navegador: lo que cada usuario puede leer o escribir lo deciden las reglas RLS. */
 const SUPABASE_URL='https://ryelugkgjcxxxebinctw.supabase.co';
@@ -248,7 +252,7 @@ const SITS=['Con fecha','Vencido sin fecha exacta','Vigente sin fecha','No tiene
 const SEV={'Vencido':0,'No tiene':1,'Por vencer':2,'Sin dato':3,'Vigente':4};
 const PCLS={'Vencido':'p-bad','No tiene':'p-bad','Por vencer':'p-warn','Sin dato':'p-neu','Vigente':'p-ok','Activa':'p-ok','En reparación':'p-warn','Baja':'p-neu','Vendida':'p-neu'};
 const MES=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
-const EQ_COLS=['id_maquina','n_interno','nombre','tipo','marca','modelo','anio','color','patente','n_motor','n_serie','propietario','centro','uso_principal','operador_asignado','estado','intervalo_mant_horas','horometro_inicial'];
+const EQ_COLS=['id_maquina','n_interno','nombre','tipo','marca','modelo','anio','color','patente','n_motor','n_serie','propietario','centro','uso_principal','operador_asignado','estado','intervalo_mant_horas','horometro_inicial','unidad_medidor','empresa_costo'];
 const EQ_NUM=['n_interno','anio','intervalo_mant_horas','horometro_inicial'];
 const RE_EQ=/^[A-Z]{2}-X?[0-9]{2,}[A-Z]?$/;   // igual que la regla de la base: TR-11, CA-01B, IM-X01
 const RE_OP=/^OP-[0-9]{2,}$/;
@@ -257,6 +261,7 @@ const SISTEMAS=['Motor','Hidráulico','Transmisión','Neumáticos','Eléctrico',
 const ESTADOS_REB=['En ordeña','Seca','Vaquilla','Ternera','Toro','Otro'];
 const PERIODOS=[['30','30 días'],['90','90 días'],['365','12 meses'],['all','Todo']];
 const PROXIMA_H=50;   // horas para marcar una preventiva como "próxima"
+const PROXIMA_KM=1000; // kilómetros, para camionetas y camiones
 /* Columnas del registro diario de leche (planilla por sala). */
 const LECHE_NUM=['vo','vo_l1','vo_l2','vo_l3','l_planta','l_descarte','l_terneros','l_personal','conc_sala_kg','conc_carro_kg','conc_kg','conc_merma_kg','conc_ingreso_kg','conc_stock_kg','mg','proteina','solidos','rcs','ufc','urea'];
 const LECHE_TXT=['conc_ingreso_detalle','observacion'];
@@ -277,9 +282,10 @@ let TIPOS=TIPO_ORDEN.slice(), SIN_HORAS=new Set(['Remolque']);
 const S={mod:'maquinaria',tab:'equipos',q:'',tipo:'Todos',centro:'Todos',docf:'Pendientes',
   user:null,authReady:false,loginBusy:false,
   eq:new Map(),docs:new Map(),ops:new Map(),plan:new Map(),loaded:false,loading:false,loadErr:'',loadedAt:0,
-  comb:[],mant:[],reb:[],control:[],leche:[],consumo:new Map(),costo:new Map(),
+  comb:[],mant:[],fact:[],reb:[],control:[],leche:[],consumo:new Map(),costo:new Map(),
   mods:{combustible:{},mantenciones:{},rebano:{},leche:{}},
-  cb:{tab:'cargas',per:'90',eq:'Todos'},mt:{tab:'intervenciones',per:'365',eq:'Todos',tipo:'Todos'},
+  estq:[],dest:[],labs:[],ing:[],med:[],lEdit:null,lConf:false,lErr:'',
+  cb:{tab:'cargas',per:'90',eq:'Todos',est:'',lista:'choferes'},mt:{tab:'intervenciones',per:'365',eq:'Todos',tipo:'Todos'},
   rb:{tab:'ultimo',centro:'Todos'},lc:{sala:'Todos',from:'',to:'',met:'litros'},
   open:null,rec:null,confirmDel:false,formErr:'',warn:'',warnAck:false,opEdit:null,saving:false,importIssues:[],importKind:null};
 
@@ -338,9 +344,10 @@ function mant(e){
   const prox=p&&p.proxima_mant_horometro!=null?+p.proxima_mant_horometro:(e.horometro_inicial!=null?e.horometro_inicial+e.intervalo_mant_horas:null);
   if(prox==null) return {txt:'Falta horómetro',cls:'gap',st:'Falta horómetro'};
   const rest=p&&p.horas_restantes!=null?+p.horas_restantes:null;
-  if(rest!=null&&rest<=0) return {txt:'Vencida ('+fmtN(prox)+' h)',cls:'bad',prox,rest,st:'Vencida'};
-  if(rest!=null&&rest<=PROXIMA_H) return {txt:'a las '+fmtN(prox)+' h',cls:'gap',prox,rest,st:'Próxima'};
-  return {txt:'a las '+fmtN(prox)+' h',cls:'',prox,rest,st:'Al día'};
+  const km=e.unidad_medidor==='km', u=km?' km':' h', aviso=km?PROXIMA_KM:PROXIMA_H;
+  if(rest!=null&&rest<=0) return {txt:'Vencida ('+fmtN(prox)+u+')',cls:'bad',prox,rest,st:'Vencida',u};
+  if(rest!=null&&rest<=aviso) return {txt:(km?'a los ':'a las ')+fmtN(prox)+u,cls:'gap',prox,rest,st:'Próxima',u};
+  return {txt:(km?'a los ':'a las ')+fmtN(prox)+u,cls:'',prox,rest,st:'Al día',u};
 }
 const eqName=id=>{const e=S.eq.get(id);return e?e.nombre:''};
 const opName=id=>id&&S.ops.get(id)?S.ops.get(id).nombre:id;
@@ -424,13 +431,22 @@ async function load(){
 /* Carga de cada módulo de registros, al abrirlo por primera vez. */
 const MOD_LOAD={
   combustible:async()=>{
-    const [rows,cons,cost]=await Promise.all([
+    const [rows,cons,cost,est,des,lab,ing,med]=await Promise.all([
       fetchAll('combustible','*',['fecha','id_carga']),
       fetchAll('v_consumo_maquina','*',['id_maquina']),
-      fetchAll('v_costo_maquina','*',['id_maquina'])]);
+      fetchAll('v_costo_maquina','*',['id_maquina']),
+      fetchAll('estanques','*',['id_estanque']),
+      fetchAll('destinos','*',['id_destino']),
+      fetchAll('labores','*',['labor']),
+      fetchAll('combustible_ingresos','*',['fecha','id_ingreso']),
+      fetchAll('estanque_mediciones','*',['id_estanque','fecha'])]);
     S.comb=rows;S.consumo=new Map(cons.map(r=>[r.id_maquina,r]));S.costo=new Map(cost.map(r=>[r.id_maquina,r]));
+    S.estq=est;S.dest=des;S.labs=lab;S.ing=ing;S.med=med;
   },
-  mantenciones:async()=>{S.mant=await fetchAll('mantenciones','*',['fecha','id_intervencion'])},
+  mantenciones:async()=>{
+    const [m,f]=await Promise.all([fetchAll('mantenciones','*',['fecha','id_intervencion']),fetchAll('facturas','*',['fecha','id'])]);
+    S.mant=m;S.fact=f;
+  },
   rebano:async()=>{
     const [r,c]=await Promise.all([fetchAll('rebano','*',['fecha','centro','lote','estado']),fetchAll('v_rebano_vs_leche','*',['fecha','centro'])]);
     S.reb=r;S.control=c;
@@ -449,7 +465,8 @@ const ensure=(...ms)=>{for(const m of ms){const st=S.mods[m];if(!st.loaded&&!st.
 const ready=(...ms)=>S.loaded&&ms.every(m=>S.mods[m].loaded);
 function clearData(){
   S.eq=new Map();S.docs=new Map();S.ops=new Map();S.plan=new Map();S.loaded=false;S.open=null;S.rec=null;S.opEdit=null;S.importIssues=[];
-  S.comb=[];S.mant=[];S.reb=[];S.control=[];S.leche=[];S.consumo=new Map();S.costo=new Map();
+  S.comb=[];S.mant=[];S.fact=[];S.reb=[];S.control=[];S.leche=[];S.consumo=new Map();S.costo=new Map();
+  S.estq=[];S.dest=[];S.labs=[];S.ing=[];S.med=[];
   for(const m in S.mods) S.mods[m]={};
 }
 const isAuthErr=e=>e&&(e.code==='PGRST301'||e.code==='PGRST303'||/jwt/i.test(e.message||''));
@@ -554,14 +571,14 @@ function renderEquipos(eqs,loading){
   </div>
   <div class="card"><div class="tablewrap">
   ${loading?'<div class="empty">Cargando equipos…</div>':!eqs.length?`<div class="empty"><strong>Aún no hay equipos</strong>Importa el Excel de maquinaria o crea el primer equipo con “Nuevo equipo”.</div>`:!rows.length?'<div class="empty">Ningún equipo coincide con los filtros.</div>':`
-  <table><thead><tr><th>ID</th><th>Equipo</th><th>Tipo</th><th>Centro</th><th>Operador</th><th>Estado</th><th class="num">Horómetro</th><th>Próx. mantención</th><th>Documentos</th><th>Ficha</th></tr></thead><tbody>
+  <table><thead><tr><th>ID</th><th>Equipo</th><th>Tipo</th><th>Centro</th><th>Operador</th><th>Estado</th><th class="num">Lectura actual</th><th>Próx. mantención</th><th>Documentos</th><th>Ficha</th></tr></thead><tbody>
   ${rows.map(e=>{const g=gaps(e),mt=mant(e),wd=worstDoc(e.id_maquina);return `<tr data-open="${esc(e.id_maquina)}" tabindex="0">
     <td class="id">${esc(e.id_maquina)}</td>
     <td><div>${esc(e.nombre)}</div><div class="muted" style="font-size:12px">${esc([e.marca,e.modelo,e.patente].filter(Boolean).join(' · '))}</div></td>
     <td>${esc(e.tipo)}</td><td>${e.centro?esc(e.centro):'<span class="gap">Sin centro</span>'}</td>
     <td>${e.operador_asignado?esc(opName(e.operador_asignado)):'<span class="muted">—</span>'}</td>
     <td><span class="pill ${PCLS[e.estado]||'p-neu'}">${esc(e.estado||'—')}</span></td>
-    <td class="num">${SIN_HORAS.has(e.tipo)?'<span class="muted">—</span>':fmtN(horoActual(e))}</td>
+    <td class="num">${SIN_HORAS.has(e.tipo)?'<span class="muted">—</span>':horoActual(e)==null?'—':fmtN(horoActual(e))+(e.unidad_medidor==='km'?' km':' h')}</td>
     <td class="${mt.cls}">${mt.txt}</td>
     <td><span class="pill ${PCLS[wd]}">${wd}</span></td>
     <td>${g.length?`<span class="gap">Falta ${g.length}</span>`:'<span class="pill p-ok">Completa</span>'}</td></tr>`}).join('')}
@@ -608,60 +625,215 @@ function renderOperadores(){
 }
 
 /* ================= Combustible ================= */
+const unidadDe=id=>(S.eq.get(id)?.unidad_medidor)||'horas';
+const uCorta=id=>unidadDe(id)==='km'?'km':'h';
+const lecturaLbl=id=>unidadDe(id)==='km'?'Odómetro (km)':'Horómetro (h)';
+const estNombre=id=>id?(S.estq.find(e=>e.id_estanque===id)?.nombre||id):'Estación de servicio';
+const desNombre=id=>S.dest.find(d=>d.id_destino===id)?.nombre||id;
+const esTraspaso=c=>!!c.id_estanque_destino;
+const destinoTxt=c=>c.id_maquina?`${c.id_maquina} · ${eqName(c.id_maquina)}`:c.id_destino?desNombre(c.id_destino):c.id_estanque_destino?'Traspaso → '+estNombre(c.id_estanque_destino):'—';
+/* Precio vigente: el de la última compra con precio hasta esa fecha (cualquier estanque). */
+function precioVigente(fecha){
+  let p=null;
+  for(const i of S.ing) if(i.tipo==='Compra'&&i.precio_litro!=null&&(!fecha||i.fecha<=fecha)&&(!p||i.fecha>=p.fecha)) p=i;
+  return p;
+}
+/* Movimientos de un estanque con saldo acumulado (entradas antes que salidas el mismo día). */
+function movimientos(est){
+  const m=[];
+  for(const i of S.ing) if(i.id_estanque===est) m.push({fecha:i.fecha,tipo:i.tipo,det:[i.proveedor,i.documento,i.observacion].filter(Boolean).join(' · '),ent:+i.litros,sal:0,kind:'ing',key:i.id_ingreso});
+  for(const c of S.comb){
+    if(c.id_estanque_destino===est) m.push({fecha:c.fecha,tipo:'Traspaso recibido',det:'desde '+estNombre(c.id_estanque),ent:+c.litros,sal:0,kind:'comb',key:c.id_carga});
+    if(c.id_estanque===est) m.push({fecha:c.fecha,tipo:esTraspaso(c)?'Traspaso enviado':'Despacho',det:destinoTxt(c)+(c.id_operador?' · '+opName(c.id_operador):''),ent:0,sal:+c.litros,kind:'comb',key:c.id_carga});
+  }
+  m.sort((a,b)=>a.fecha.localeCompare(b.fecha)||(b.ent-a.ent)||String(a.key).localeCompare(String(b.key)));
+  let s=0;for(const x of m){s+=x.ent-x.sal;x.saldo=s}
+  return m;
+}
+const stockAl=(est,fecha,excl)=>{let s=0;for(const x of movimientos(est)) if((!fecha||x.fecha<=fecha)&&!(excl&&x.kind==='comb'&&x.key===excl)) s+=x.ent-x.sal;return s};
 function renderComb(){
   const st=S.mods.combustible, ok=ready('combustible');
   const c=cutoff(S.cb.per), fe=S.cb.eq;
-  const rows=S.comb.filter(r=>(!c||r.fecha>=c)&&(fe==='Todos'||r.id_maquina===fe));
+  /* consumo = despachos a equipos y otros destinos; los traspasos entre estanques no son consumo */
+  const todos=S.comb.filter(r=>(!c||r.fecha>=c)&&(fe==='Todos'||r.id_maquina===fe||r.id_destino===fe));
+  const rows=todos.filter(r=>!esTraspaso(r));
   const litros=sum(rows,'litros');
   const conPrecio=rows.filter(r=>r.precio_litro!=null);
   const costo=conPrecio.reduce((a,r)=>a+(+r.litros)*(+r.precio_litro),0);
   const sinPrecio=rows.length-conPrecio.length;
-  const cons=fe==='Todos'?[...S.consumo.values()]:[S.consumo.get(fe)].filter(Boolean);
+  const cons=[...S.consumo.values()].filter(r=>r.unidad!=='km'&&(fe==='Todos'||r.id_maquina===fe));
   const hh=sum(cons.filter(r=>+r.horas>0),'horas'), ll=sum(cons.filter(r=>+r.horas>0),'litros');
   const lh=hh>0?ll/hh:null;
+  const stockTot=S.estq.filter(e=>e.activo).reduce((a,e)=>a+stockAl(e.id_estanque),0);
   const L=v=>ok?v:'…';
-  const eqOpts=[['Todos','Todos los equipos'],...eqList(fe==='Todos'?null:fe)];
+  const eqOpts=[['Todos','Todos los destinos'],...eqList(fe==='Todos'?null:fe),...S.dest.map(d=>[d.id_destino,'Otro destino · '+d.nombre])];
   $('#main').innerHTML=`
-  ${head('Combustible','Cargas por equipo y operador, con horómetro, consumo en litros por hora y costo',`
+  ${head('Combustible','Despachos por equipo y chofer, estanques con su cuadre, rendimiento y costo',`
     <button class="btn" data-act="import" data-kind="combustible" ${ok?'':'disabled'}>Importar Excel</button>
+    <button class="btn" data-act="rec-new" data-kind="ing" ${ok?'':'disabled'}>Registrar ingreso</button>
     <button class="btn primary" data-act="rec-new" data-kind="comb" ${ok?'':'disabled'}>Nueva carga</button>`)}
   ${modBanners('combustible','mantenciones')}
-  <div class="filters">${perChips('cb')} ${selSet('cb.eq','Equipo',eqOpts,fe)}</div>
+  <div class="filters">${perChips('cb')} ${selSet('cb.eq','Destino',eqOpts,fe)}</div>
   <div class="summary s4">
-    ${stat(L(fmt0(litros))+'<small>L</small>','Litros cargados en el período')}
+    ${stat(L(fmt0(litros))+'<small>L</small>',`Litros despachados en el período · ${rows.length} carga${rows.length===1?'':'s'}`)}
     ${stat(L(clp(costo)),sinPrecio?`Costo del período · ${sinPrecio} carga${sinPrecio>1?'s':''} sin precio`:'Costo del período',sinPrecio?'warn':'')}
-    ${stat(L(fmt0(rows.length)),'Cargas en el período')}
-    ${stat(L(lh==null?'—':fmt1(lh))+'<small>L/h</small>',fe==='Todos'?'Consumo promedio de la flota (histórico)':'Consumo promedio del equipo (histórico)')}
+    ${stat(L(fmt0(stockTot))+'<small>L</small>','Stock calculado en estanques (hoy)')}
+    ${stat(L(lh==null?'—':fmt1(lh))+'<small>L/h</small>',fe==='Todos'?'Consumo de tractores y maquinaria (histórico)':'Consumo del equipo (histórico)')}
   </div>
-  ${tabsHtml('cb',[['cargas','Cargas',rows.length],['consumo','Consumo y costo por equipo',null]])}
+  ${tabsHtml('cb',[['cargas','Cargas',todos.length],['estanques','Estanques',S.estq.length],['consumo','Rendimiento y costo por equipo',null],['listas','Listas',null]])}
   <div id="pane"></div>`;
-  if(!ok){$('#pane').innerHTML=loadingBox(st.err?'No se pudieron cargar las cargas.':'Cargando cargas de combustible…');return}
-  if(S.cb.tab==='cargas'){
-    const list=rows.slice().sort((a,b)=>b.fecha.localeCompare(a.fecha)||byId(b.id_carga,a.id_carga));
-    $('#pane').innerHTML=`<div class="card"><div class="tablewrap">${!list.length?`<div class="empty"><strong>${S.comb.length?'No hay cargas en este período':'Aún no hay cargas de combustible'}</strong>${S.comb.length?'Cambia el período o el equipo.':'Registra la primera con “Nueva carga” o importa la plantilla de combustible.'}</div>`:`
-    <table><thead><tr><th>Fecha</th><th>ID</th><th>Equipo</th><th>Operador</th><th class="num">Litros</th><th class="num">Horómetro</th><th>Lleno</th><th>Origen</th><th class="num">$/L</th><th class="num">Total</th></tr></thead><tbody>
-    ${list.map(r=>`<tr data-rec="comb" data-key="${esc(r.id_carga)}" tabindex="0">
-      <td class="num" style="text-align:left">${esc(r.fecha)}</td><td class="id">${esc(r.id_carga)}</td>
-      <td><span class="id">${esc(r.id_maquina)}</span> <span class="muted">${esc(eqName(r.id_maquina))}</span></td>
-      <td>${esc(opName(r.id_operador))}</td><td class="num">${fmt1(r.litros)}</td>
-      <td class="num">${r.horometro==null?(usaHoras(r.id_maquina)?'<span class="gap">Falta</span>':'—'):fmtN(r.horometro)}</td>
-      <td>${r.estanque_lleno?'Sí':'No'}</td><td>${esc(r.origen||'—')}</td>
-      <td class="num">${r.precio_litro==null?'—':clp(r.precio_litro)}</td>
-      <td class="num">${r.precio_litro==null?'—':clp(r.litros*r.precio_litro)}</td></tr>`).join('')}
-    </tbody><tfoot><tr><td colspan="4">Total del período</td><td class="num">${fmt1(litros)}</td><td colspan="4"></td><td class="num">${clp(costo)}</td></tr></tfoot></table>`}</div></div>`;
-  }else{
-    const ids=new Set([...S.comb.map(r=>r.id_maquina),...S.mant.map(r=>r.id_maquina)]);
-    const lit=new Map();for(const r of S.comb) lit.set(r.id_maquina,(lit.get(r.id_maquina)||0)+(+r.litros));
-    const list=[...ids].filter(id=>fe==='Todos'||id===fe).map(id=>{const k=S.consumo.get(id)||{},co=S.costo.get(id)||{};return {id,litros:lit.get(id)||0,horas:k.horas,lh:k.litros_hora,comb:+co.costo_combustible||0,mant:+co.costo_mantenciones||0,tot:+co.costo_total||0,sin:+co.litros_sin_precio||0}})
-      .sort((a,b)=>b.tot-a.tot||byId(a.id,b.id));
-    $('#pane').innerHTML=`<div class="card"><div class="tablewrap">${!list.length?'<div class="empty"><strong>Sin datos todavía</strong>Aparecerán aquí los equipos con cargas de combustible o mantenciones.</div>':`
-    <table><thead><tr><th>Equipo</th><th class="num">Litros cargados</th><th class="num">Horas medidas</th><th class="num">L/h</th><th class="num">Combustible</th><th class="num">Mantenciones</th><th class="num">Costo total</th></tr></thead><tbody>
-    ${list.map(r=>`<tr><td><span class="id">${esc(r.id)}</span> <span class="muted">${esc(eqName(r.id))}</span></td>
-      <td class="num">${fmt0(r.litros)}</td><td class="num">${r.horas==null?'—':fmtN(r.horas)}</td><td class="num">${r.lh==null?'—':fmt1(r.lh)}</td>
-      <td class="num">${clp(r.comb)}${r.sin?` <span class="gap" title="${fmt0(r.sin)} L sin precio">*</span>`:''}</td><td class="num">${clp(r.mant)}</td><td class="num"><b>${clp(r.tot)}</b></td></tr>`).join('')}
-    </tbody></table>`}</div></div>
-    <p class="note">Todo el historial. L/h se calcula entre dos cargas con estanque lleno (método lleno/lleno). * = hay litros sin precio, que no suman al costo.</p>`;
-  }
+  if(!ok){$('#pane').innerHTML=loadingBox(st.err?'No se pudieron cargar los datos de combustible.':'Cargando combustible…');return}
+  if(S.cb.tab==='cargas') renderCargas(todos);
+  else if(S.cb.tab==='estanques') renderEstanques();
+  else if(S.cb.tab==='consumo') renderConsumo(fe);
+  else renderListas();
+}
+function renderCargas(list){
+  list=list.slice().sort((a,b)=>b.fecha.localeCompare(a.fecha)||byId(b.id_carga,a.id_carga));
+  const desp=list.filter(r=>!esTraspaso(r)), lit=sum(desp,'litros'), cos=desp.filter(r=>r.precio_litro!=null).reduce((a,r)=>a+r.litros*r.precio_litro,0);
+  $('#pane').innerHTML=`<div class="card"><div class="tablewrap">${!list.length?`<div class="empty"><strong>${S.comb.length?'No hay cargas en este período':'Aún no hay cargas de combustible'}</strong>${S.comb.length?'Cambia el período o el destino.':'Registra la primera con “Nueva carga” o importa la base de datos de petróleo.'}</div>`:`
+  <table><thead><tr><th>Fecha</th><th>ID</th><th>Destino</th><th>Chofer</th><th class="num">Litros</th><th class="num">Lectura</th><th>Estanque</th><th>Labor</th><th class="num">$/L</th><th class="num">Total</th></tr></thead><tbody>
+  ${list.map(r=>`<tr data-rec="comb" data-key="${esc(r.id_carga)}" tabindex="0">
+    <td class="num" style="text-align:left">${esc(r.fecha)}</td><td class="id">${esc(r.id_carga)}</td>
+    <td>${r.id_maquina?`<span class="id">${esc(r.id_maquina)}</span> <span class="muted">${esc(eqName(r.id_maquina))}</span>`:esTraspaso(r)?`<span class="pill p-neu">Traspaso</span> ${esc(estNombre(r.id_estanque_destino))}`:esc(desNombre(r.id_destino))}</td>
+    <td>${r.id_operador?esc(opName(r.id_operador)):'<span class="muted">—</span>'}</td><td class="num">${fmt1(r.litros)}</td>
+    <td class="num">${!r.id_maquina?'<span class="muted">—</span>':r.horometro==null?(usaHoras(r.id_maquina)?'<span class="gap">Falta</span>':'—'):fmtN(r.horometro)+' '+uCorta(r.id_maquina)}</td>
+    <td>${esc(estNombre(r.id_estanque))}</td><td>${esc(r.labor||'')}</td>
+    <td class="num">${r.precio_litro==null?'—':clp(r.precio_litro)}</td>
+    <td class="num">${r.precio_litro==null||esTraspaso(r)?'—':clp(r.litros*r.precio_litro)}</td></tr>`).join('')}
+  </tbody><tfoot><tr><td colspan="4">Despachado en el período (sin traspasos)</td><td class="num">${fmt1(lit)}</td><td colspan="4"></td><td class="num">${clp(cos)}</td></tr></tfoot></table>`}</div></div>`;
+}
+function renderEstanques(){
+  const c=cutoff(S.cb.per);
+  if(!S.cb.est||!S.estq.some(e=>e.id_estanque===S.cb.est)) S.cb.est=S.estq[0]?.id_estanque||'';
+  const res=S.estq.map(e=>{
+    const mv=movimientos(e.id_estanque), per=mv.filter(x=>!c||x.fecha>=c);
+    const med=S.med.filter(m=>m.id_estanque===e.id_estanque).sort((a,b)=>b.fecha.localeCompare(a.fecha))[0];
+    const dif=med?+med.litros_medidos-stockAl(e.id_estanque,med.fecha):null;
+    return {e,stock:mv.length?mv[mv.length-1].saldo:0,ent:sum(per,'ent'),sal:sum(per,'sal'),med,dif};
+  });
+  const sel=S.cb.est, mv=sel?movimientos(sel).filter(x=>!c||x.fecha>=c).reverse():[];
+  const meds=S.med.filter(m=>m.id_estanque===sel).sort((a,b)=>b.fecha.localeCompare(a.fecha));
+  $('#pane').innerHTML=`
+  <div class="actions" style="margin-bottom:12px"><button class="btn" data-act="rec-new" data-kind="ing">Registrar ingreso</button><button class="btn" data-act="rec-new" data-kind="med">Registrar medición</button></div>
+  <div class="card" style="margin-bottom:16px"><div class="tablewrap">${!S.estq.length?'<div class="empty"><strong>Aún no hay estanques</strong>Agrégalos en la pestaña Listas.</div>':`
+  <table><thead><tr><th>Estanque</th><th class="num">Stock calculado</th><th class="num">Capacidad</th><th class="num">Entradas del período</th><th class="num">Salidas del período</th><th>Última medición</th><th>Cuadre</th></tr></thead><tbody>
+  ${res.map(r=>`<tr data-act="est-sel" data-val="${esc(r.e.id_estanque)}" style="cursor:pointer" tabindex="0">
+    <td><b>${esc(r.e.nombre)}</b>${r.e.activo?'':' <span class="muted">(inactivo)</span>'}</td>
+    <td class="num ${r.stock<0?'bad':''}"><b>${fmt0(r.stock)} L</b></td>
+    <td class="num">${r.e.capacidad_l?fmt0(r.e.capacidad_l)+' L · '+fmt0(r.stock/r.e.capacidad_l*100)+' %':'—'}</td>
+    <td class="num">${fmt0(r.ent)}</td><td class="num">${fmt0(r.sal)}</td>
+    <td>${r.med?`${esc(r.med.fecha)} · ${fmt0(r.med.litros_medidos)} L`:'<span class="muted">Sin mediciones</span>'}</td>
+    <td>${r.dif==null?'<span class="pill p-neu">Sin medir</span>':Math.abs(r.dif)<=Math.max(20,0.01*Math.abs(+r.med.litros_medidos))?'<span class="pill p-ok">Cuadra</span>':`<span class="pill ${r.dif<0?'p-bad':'p-warn'}">${r.dif>0?'+':''}${fmt0(r.dif)} L</span>`}</td></tr>`).join('')}
+  </tbody></table>`}</div></div>
+  ${sel?`<div class="filters">${S.estq.map(e=>`<button class="chip" data-set="cb.est" data-val="${esc(e.id_estanque)}" aria-pressed="${sel===e.id_estanque}">${esc(e.nombre)}</button>`).join('')}</div>
+  <div class="two">
+    <div class="panel" style="grid-column:1/-1"><h3>Movimientos de ${esc(estNombre(sel))} en el período</h3><div class="tablewrap">${!mv.length?'<div class="empty">Sin movimientos en este período.</div>':`
+      <table><thead><tr><th>Fecha</th><th>Movimiento</th><th>Detalle</th><th class="num">Entrada</th><th class="num">Salida</th><th class="num">Saldo</th></tr></thead><tbody>
+      ${mv.slice(0,300).map(x=>`<tr data-rec="${x.kind}" data-key="${esc(x.key)}" tabindex="0"><td class="num" style="text-align:left">${esc(x.fecha)}</td><td>${esc(x.tipo)}</td><td class="clip" title="${esc(x.det)}">${esc(x.det)}</td>
+        <td class="num">${x.ent?fmt0(x.ent):''}</td><td class="num">${x.sal?fmt0(x.sal):''}</td><td class="num ${x.saldo<0?'bad':''}">${fmt0(x.saldo)}</td></tr>`).join('')}
+      </tbody></table>${mv.length>300?`<p class="note">Se muestran los 300 movimientos más recientes de ${mv.length}.</p>`:''}`}</div></div>
+  </div>
+  <div class="panel"><h3>Mediciones físicas de ${esc(estNombre(sel))}</h3><div class="tablewrap">${!meds.length?'<div class="empty">Sin mediciones. Registra una medición (varilla o medidor) para cuadrar el stock calculado.</div>':`
+    <table><thead><tr><th>Fecha</th><th class="num">Medido</th><th class="num">Calculado a esa fecha</th><th class="num">Diferencia</th><th>Observación</th></tr></thead><tbody>
+    ${meds.map(m=>{const calc=stockAl(sel,m.fecha),d=+m.litros_medidos-calc;return `<tr data-rec="med" data-key="${esc(m.id_estanque+'|'+m.fecha)}" tabindex="0"><td class="num" style="text-align:left">${esc(m.fecha)}</td><td class="num">${fmt0(m.litros_medidos)}</td><td class="num">${fmt0(calc)}</td><td class="num ${Math.abs(d)>20?(d<0?'bad':'gap'):''}">${d>0?'+':''}${fmt0(d)}</td><td class="muted">${esc(m.observacion||'')}</td></tr>`}).join('')}
+    </tbody></table>`}</div></div>`:''}
+  <p class="note">Stock calculado = ingresos (compras, saldo inicial, ajustes) + traspasos recibidos − despachos − traspasos enviados. Diferencia negativa en la medición = falta combustible respecto de lo registrado.</p>`;
+}
+function renderConsumo(fe){
+  const ids=new Set([...S.comb.map(r=>r.id_maquina),...S.mant.map(r=>r.id_maquina)].filter(Boolean));
+  const lit=new Map();for(const r of S.comb) if(r.id_maquina) lit.set(r.id_maquina,(lit.get(r.id_maquina)||0)+(+r.litros));
+  const list=[...ids].filter(id=>fe==='Todos'||id===fe).map(id=>{const k=S.consumo.get(id)||{},co=S.costo.get(id)||{};return {id,u:unidadDe(id),litros:lit.get(id)||0,med:k.horas,lh:k.litros_hora,kml:k.km_litro,comb:+co.costo_combustible||0,mant:+co.costo_mantenciones||0,tot:+co.costo_total||0,sin:+co.litros_sin_precio||0}})
+    .sort((a,b)=>b.tot-a.tot||byId(a.id,b.id));
+  const otros=S.dest.map(d=>{const rs=S.comb.filter(c=>c.id_destino===d.id_destino);return {d,l:sum(rs,'litros'),c:rs.filter(r=>r.precio_litro!=null).reduce((a,r)=>a+r.litros*r.precio_litro,0)}}).filter(x=>x.l>0).sort((a,b)=>b.l-a.l);
+  $('#pane').innerHTML=`<div class="card"><div class="tablewrap">${!list.length?'<div class="empty"><strong>Sin datos todavía</strong>Aparecerán aquí los equipos con cargas de combustible o mantenciones.</div>':`
+  <table><thead><tr><th>Equipo</th><th class="num">Litros cargados</th><th class="num">Uso medido</th><th class="num">Rendimiento</th><th class="num">Combustible</th><th class="num">Mantenciones</th><th class="num">Costo total</th></tr></thead><tbody>
+  ${list.map(r=>`<tr><td><span class="id">${esc(r.id)}</span> <span class="muted">${esc(eqName(r.id))}</span></td>
+    <td class="num">${fmt0(r.litros)}</td><td class="num">${r.med==null?'—':fmtN(r.med)+' '+(r.u==='km'?'km':'h')}</td>
+    <td class="num">${r.u==='km'?(r.kml==null?'—':fmt1(r.kml)+' km/L'):(r.lh==null?'—':fmt1(r.lh)+' L/h')}</td>
+    <td class="num">${clp(r.comb)}${r.sin?` <span class="gap" title="${fmt0(r.sin)} L sin precio">*</span>`:''}</td><td class="num">${clp(r.mant)}</td><td class="num"><b>${clp(r.tot)}</b></td></tr>`).join('')}
+  </tbody></table>`}</div></div>
+  ${otros.length?`<div class="panel" style="margin-top:16px"><h3>Otros destinos</h3><div class="tablewrap"><table><thead><tr><th>Destino</th><th>Tipo</th><th class="num">Litros</th><th class="num">Costo</th></tr></thead><tbody>
+    ${otros.map(x=>`<tr><td>${esc(x.d.nombre)}</td><td>${esc(x.d.tipo)}</td><td class="num">${fmt0(x.l)}</td><td class="num">${clp(x.c)}</td></tr>`).join('')}</tbody></table></div></div>`:''}
+  <p class="note">Todo el historial. Rendimiento entre dos cargas con estanque lleno: L/h en tractores y maquinaria (horómetro), km/L en camionetas y camiones (odómetro). * = hay litros sin precio, que no suman al costo.</p>`;
+}
+/* ---------- listas configurables: choferes, labores, otros destinos, estanques ---------- */
+const LISTAS={
+  choferes:{t:'Choferes',tabla:'operadores',pk:'id_operador',pref:'OP',
+    items:()=>[...S.ops.values()].map(o=>({pk:o.id_operador,nombre:o.nombre,activo:o.activo!=='No',raw:o})),
+    uso:pk=>S.comb.filter(c=>c.id_operador===pk).length+[...S.eq.values()].filter(e=>e.operador_asignado===pk).length,
+    extra:[],row:(it,nombre)=>({id_operador:it?it.pk:null,nombre,activo:it?it.activo:true,centro:it?.raw?.centro||null})},
+  labores:{t:'Labores',tabla:'labores',pk:'labor',
+    items:()=>S.labs.map(l=>({pk:l.labor,nombre:l.labor,activo:l.activo,raw:l})),
+    uso:pk=>S.comb.filter(c=>c.labor===pk).length,extra:[]},
+  destinos:{t:'Otros destinos',tabla:'destinos',pk:'id_destino',pref:'DES',
+    items:()=>S.dest.map(d=>({pk:d.id_destino,nombre:d.nombre,activo:d.activo,raw:d})),
+    uso:pk=>S.comb.filter(c=>c.id_destino===pk).length,
+    extra:[['l-tipo','Tipo','tipo',['Bidón','Servicio externo','Vehículo externo','Otro']],['l-emp','Empresa de costo (estadísticas)','empresa_costo',null]]},
+  estanques:{t:'Estanques',tabla:'estanques',pk:'id_estanque',pref:'EST',
+    items:()=>S.estq.map(e=>({pk:e.id_estanque,nombre:e.nombre,activo:e.activo,raw:e})),
+    uso:pk=>S.comb.filter(c=>c.id_estanque===pk||c.id_estanque_destino===pk).length+S.ing.filter(i=>i.id_estanque===pk).length,
+    extra:[['l-cap','Capacidad (L)','capacidad_l','num'],['l-centro','Centro','centro',CENTROS]]}
+};
+function renderListas(){
+  const k=S.cb.lista, Lc=LISTAS[k], items=Lc.items().sort((a,b)=>(b.activo-a.activo)||a.nombre.localeCompare(b.nombre));
+  const ed=S.lEdit?items.find(i=>String(i.pk)===String(S.lEdit)):null;
+  const xf=([id,label,campo,tipo])=>{const v=ed?ed.raw[campo]:null;return Array.isArray(tipo)?fld(id,label,null,{list:opt(tipo,v,campo!=='tipo')}):fld(id,label,v,{type:tipo==='num'?'number':'text'})};
+  $('#pane').innerHTML=`
+  <div class="filters">${Object.entries(LISTAS).map(([key,l])=>`<button class="chip" data-act="lista" data-val="${key}" aria-pressed="${k===key}">${l.t} <span class="count">${l.items().filter(i=>i.activo).length}</span></button>`).join('')}</div>
+  <div class="card">
+    <form class="opform" id="listaform" novalidate style="grid-template-columns:repeat(${2+Lc.extra.length},minmax(0,1fr)) auto">
+      ${fld('l-nombre',ed?'Nombre':'Agregar '+Lc.t.toLowerCase().replace(/s$/,'').replace(/e$/,'')+' — nombre',ed?ed.nombre:'',{ph:k==='choferes'?'NOMBRE APELLIDO':''})}
+      ${Lc.extra.map(xf).join('')}
+      <div></div>
+      <div class="actions"><button class="btn primary" type="submit">${ed?'Guardar':'Agregar'}</button>${ed?`<button class="btn" type="button" data-act="lista-activo">${ed.activo?'Desactivar':'Activar'}</button>
+        ${S.lConf?`<span class="confirm">¿Eliminar? <button class="btn danger" type="button" data-act="lista-del-si">Eliminar</button></span>`:`<button class="btn danger" type="button" data-act="lista-del">Eliminar</button>`}
+        <button class="btn ghost" type="button" data-act="lista-cancel">Cancelar</button>`:''}</div>
+      <div class="err" style="grid-column:1/-1" ${S.lErr?'':'hidden'}>${esc(S.lErr)}</div>
+    </form>
+    <div class="tablewrap"><table><thead><tr><th>Nombre</th>${Lc.extra.map(([,l])=>`<th>${l}</th>`).join('')}<th>Estado</th><th class="num">Usos</th></tr></thead><tbody>
+    ${items.map(i=>`<tr data-act="lista-edit" data-val="${esc(i.pk)}" style="cursor:pointer" tabindex="0"><td>${esc(i.nombre)}</td>${Lc.extra.map(([,,campo])=>`<td>${esc(i.raw[campo]??'—')}</td>`).join('')}
+      <td>${i.activo?'<span class="pill p-ok">Activo</span>':'<span class="pill p-neu">Inactivo</span>'}</td><td class="num">${fmt0(Lc.uso(i.pk))}</td></tr>`).join('')}
+    </tbody></table></div>
+  </div>
+  <p class="note">Los inactivos no aparecen en las listas desplegables, pero sus registros se conservan. Solo se puede eliminar lo que no tiene usos; si tiene, desactívalo.</p>`;
+}
+async function guardarLista(){
+  const k=S.cb.lista, Lc=LISTAS[k];
+  const nombre=(val('l-nombre')||'').replace(/\s+/g,' ').trim().toUpperCase();
+  if(!nombre){S.lErr='Escribe el nombre.';render();return}
+  const items=Lc.items(), ed=S.lEdit?items.find(i=>String(i.pk)===String(S.lEdit)):null;
+  if(items.some(i=>i.nombre.toUpperCase()===nombre&&(!ed||i.pk!==ed.pk))){S.lErr=`Ya existe “${nombre}”.`;render();return}
+  try{
+    if(k==='labores'){
+      if(ed) await must(sb.from('labores').update({labor:nombre}).eq('labor',ed.pk));
+      else await must(sb.from('labores').insert({labor:nombre}));
+    }else{
+      const row={nombre};
+      for(const [id,,campo,tipo] of Lc.extra){row[campo]=tipo==='num'?numv(id,1):(val(id)||null)}
+      if(k==='destinos'&&!row.tipo) row.tipo='Otro';
+      if(ed) await must(sb.from(Lc.tabla).update(row).eq(Lc.pk,ed.pk));
+      else{
+        const gen=nextIdGen(Lc.pref,items.map(i=>i.pk));const id=gen().replace(/-0+(\d{2,})$/,'-$1');
+        await must(sb.from(Lc.tabla).insert({...row,[Lc.pk]:id,activo:true}));
+      }
+    }
+    S.lEdit=null;S.lErr='';S.lConf=false;toast(`${Lc.t}: “${nombre}” guardado`);
+    await (k==='choferes'?load():loadMod('combustible'));
+  }catch(e){S.lErr=errMsg(e);render()}
+}
+async function accionLista(accion){
+  const k=S.cb.lista, Lc=LISTAS[k], ed=Lc.items().find(i=>String(i.pk)===String(S.lEdit));
+  if(!ed) return;
+  try{
+    if(accion==='activo') await must(sb.from(Lc.tabla).update({activo:!ed.activo}).eq(Lc.pk,ed.pk));
+    else{
+      if(Lc.uso(ed.pk)>0){S.lConf=false;S.lErr=`“${ed.nombre}” tiene ${Lc.uso(ed.pk)} usos registrados, así que no se puede eliminar. Desactívalo para que no aparezca en las listas.`;render();return}
+      await must(sb.from(Lc.tabla).delete().eq(Lc.pk,ed.pk));
+    }
+    S.lEdit=null;S.lConf=false;S.lErr='';toast(accion==='activo'?(ed.activo?'Desactivado':'Activado'):'Eliminado');
+    await (k==='choferes'?load():loadMod('combustible'));
+  }catch(e){S.lErr=e.code==='23503'?'Tiene registros asociados: desactívalo en vez de eliminarlo.':errMsg(e);S.lConf=false;render()}
 }
 
 /* ================= Mantenciones ================= */
@@ -680,11 +852,13 @@ function renderMant(){
   const dias=sum(rows,'dias_fuera_servicio');
   const pr=planRows();
   const venc=pr.filter(x=>x.m.st==='Vencida').length, prox=pr.filter(x=>x.m.st==='Próxima').length;
+  const facts=S.fact.filter(f=>(!c||f.fecha>=c)&&(fe==='Todos'||f.id_maquina===fe));
   const L=v=>ok?v:'…';
   const eqOpts=[['Todos','Todos los equipos'],...eqList(fe==='Todos'?null:fe)];
   $('#main').innerHTML=`
   ${head('Mantenciones','Intervenciones preventivas y correctivas por equipo. La próxima preventiva se calcula por horas.',`
     <button class="btn" data-act="import" data-kind="mantenciones" ${ok?'':'disabled'}>Importar Excel</button>
+    <button class="btn" data-act="rec-new" data-kind="fact" ${ok?'':'disabled'}>Cargar factura (PDF)</button>
     <button class="btn primary" data-act="rec-new" data-kind="mant" ${ok?'':'disabled'}>Nueva intervención</button>`)}
   ${modBanners('mantenciones','combustible')}
   <div class="filters">${perChips('mt')} ${selSet('mt.eq','Equipo',eqOpts,fe)} ${selSet('mt.tipo','Tipo',[['Todos','Preventivas y correctivas'],'Preventiva','Correctiva'],ft)}</div>
@@ -694,7 +868,7 @@ function renderMant(){
     ${stat(L(fmtN(dias))+'<small>días</small>','Fuera de servicio en el período',dias?'warn':'')}
     ${stat(L(venc),`Preventivas vencidas · ${prox} próxima${prox===1?'':'s'} (≤ ${PROXIMA_H} h)`,venc?'bad':prox?'warn':'')}
   </div>
-  ${tabsHtml('mt',[['intervenciones','Intervenciones',rows.length],['plan','Plan por horas',pr.length]])}
+  ${tabsHtml('mt',[['intervenciones','Intervenciones',rows.length],['plan','Plan por horas',pr.length],['facturas','Facturas',facts.length]])}
   <div id="pane"></div>`;
   if(!ok){$('#pane').innerHTML=loadingBox(st.err?'No se pudieron cargar las mantenciones.':'Cargando mantenciones…');return}
   if(S.mt.tab==='intervenciones'){
@@ -710,15 +884,28 @@ function renderMant(){
       <td class="num">${clp((+r.costo_repuestos||0)+(+r.costo_mano_obra||0))}</td>
       <td>${esc([r.tipo_taller,r.proveedor].filter(Boolean).join(' · ')||'—')}</td><td class="num">${fmtN(r.dias_fuera_servicio)}</td></tr>`).join('')}
     </tbody><tfoot><tr><td colspan="9">Total del período</td><td class="num">${clp(costo)}</td><td></td><td class="num">${fmtN(dias)}</td></tr></tfoot></table>`}</div></div>`;
+  }else if(S.mt.tab==='facturas'){
+    const list=facts.slice().sort((a,b)=>b.fecha.localeCompare(a.fecha)||b.id-a.id);
+    $('#pane').innerHTML=`<div class="card"><div class="tablewrap">${!list.length?`<div class="empty"><strong>${S.fact.length?'No hay facturas con estos filtros':'Aún no hay facturas cargadas'}</strong>${S.fact.length?'Cambia el período o el equipo.':'Usa “Cargar factura (PDF)”: la página lee la fecha, el proveedor, el detalle y los montos, y tú los revisas antes de guardar.'}</div>`:`
+    <table><thead><tr><th>Fecha</th><th>Equipo</th><th>Proveedor</th><th>Documento</th><th>Detalle</th><th class="num">Neto</th><th class="num">Total</th><th>Intervención</th><th>PDF</th></tr></thead><tbody>
+    ${list.map(f=>`<tr data-rec="fact" data-key="${f.id}" tabindex="0">
+      <td class="num" style="text-align:left">${esc(f.fecha)}</td><td><span class="id">${esc(f.id_maquina)}</span> <span class="muted">${esc(eqName(f.id_maquina))}</span></td>
+      <td>${esc(f.proveedor||'—')}<div class="muted" style="font-size:12px">${esc(f.rut_proveedor||'')}</div></td>
+      <td>${esc(docCorto(f))}</td><td class="clip" title="${esc(f.detalle)}">${esc(f.detalle||'—')}</td>
+      <td class="num">${clp((+f.monto_neto||0)+(+f.monto_exento||0))}</td><td class="num">${clp(f.monto_total)}</td>
+      <td class="id">${esc(f.id_intervencion||'—')}</td>
+      <td><button class="btn ghost" data-act="fact-pdf" data-path="${esc(f.archivo)}">Ver PDF</button></td></tr>`).join('')}
+    </tbody><tfoot><tr><td colspan="5">Total del período</td><td class="num">${clp(list.reduce((a,f)=>a+(+f.monto_neto||0)+(+f.monto_exento||0),0))}</td><td class="num">${clp(sum(list,'monto_total'))}</td><td colspan="2"></td></tr></tfoot></table>`}</div></div>
+    <p class="note">El costo que pasa a la mantención es el neto (más el monto exento), sin IVA. Borrar una factura no descuenta su costo de la intervención: corrígelo en la intervención.</p>`;
   }else{
     const pcls={'Vencida':'p-bad','Próxima':'p-warn','Falta horómetro':'p-warn','Al día':'p-ok','Sin plan':'p-neu'};
     $('#pane').innerHTML=`<div class="card"><div class="tablewrap">
-    <table><thead><tr><th>Equipo</th><th class="num">Intervalo</th><th>Última preventiva</th><th class="num">Horómetro actual</th><th class="num">Próxima a las</th><th class="num">Faltan</th><th>Estado</th></tr></thead><tbody>
-    ${pr.map(({e,p,m})=>`<tr data-open="${esc(e.id_maquina)}" tabindex="0"><td><span class="id">${esc(e.id_maquina)}</span> <span class="muted">${esc(e.nombre)}</span></td>
-      <td class="num">${e.intervalo_mant_horas==null?'—':fmt0(e.intervalo_mant_horas)+' h'}</td>
-      <td>${p.fecha_ultima_preventiva?esc(p.fecha_ultima_preventiva)+' · '+fmtN(p.horometro_ultima_preventiva)+' h':'<span class="muted">Sin registro</span>'}</td>
-      <td class="num">${fmtN(horoActual(e))}</td><td class="num">${m.prox==null?'—':fmtN(m.prox)+' h'}</td>
-      <td class="num">${m.rest==null?'—':fmtN(m.rest)+' h'}</td><td><span class="pill ${pcls[m.st]}">${m.st}</span></td></tr>`).join('')}
+    <table><thead><tr><th>Equipo</th><th class="num">Intervalo</th><th>Última preventiva</th><th class="num">Lectura actual</th><th class="num">Próxima</th><th class="num">Faltan</th><th>Estado</th></tr></thead><tbody>
+    ${pr.map(({e,p,m})=>{const u=e.unidad_medidor==='km'?' km':' h';return `<tr data-open="${esc(e.id_maquina)}" tabindex="0"><td><span class="id">${esc(e.id_maquina)}</span> <span class="muted">${esc(e.nombre)}</span></td>
+      <td class="num">${e.intervalo_mant_horas==null?'—':fmt0(e.intervalo_mant_horas)+u}</td>
+      <td>${p.fecha_ultima_preventiva?esc(p.fecha_ultima_preventiva)+' · '+fmtN(p.horometro_ultima_preventiva)+u:'<span class="muted">Sin registro</span>'}</td>
+      <td class="num">${horoActual(e)==null?'—':fmtN(horoActual(e))+u}</td><td class="num">${m.prox==null?'—':fmtN(m.prox)+u}</td>
+      <td class="num">${m.rest==null?'—':fmtN(m.rest)+u}</td><td><span class="pill ${pcls[m.st]}">${m.st}</span></td></tr>`}).join('')}
     </tbody></table></div></div>
     <p class="note">Próxima = horómetro de la última preventiva (o el inicial) + intervalo. “Próxima” = faltan ${PROXIMA_H} h o menos. Abre un equipo para completar su intervalo u horómetro inicial.</p>`;
   }
@@ -971,6 +1158,7 @@ let rsz;window.addEventListener('resize',()=>{clearTimeout(rsz);rsz=setTimeout((
 function opt(list,val,blank=true){return (blank?'<option value="">—</option>':'')+list.map(v=>{const [k,l]=Array.isArray(v)?v:[v,v];return `<option value="${esc(k)}" ${val===k?'selected':''}>${esc(l)}</option>`}).join('')}
 function fld(id,label,val,{type='text',wide=false,need=false,list=null,ro=false,ph=''}={}){
   const inner=list?`<select class="field" id="${id}" ${ro?'disabled':''}>${list}</select>`:
+    type==='area'?`<textarea class="field" id="${id}" ${ro?'readonly':''} placeholder="${esc(ph)}">${esc(val??'')}</textarea>`:
     `<input class="field" id="${id}" type="${type}" value="${esc(val??'')}" ${ro?'readonly':''} ${type==='number'?'inputmode="decimal" min="0" step="any"':''} placeholder="${esc(ph)}">`;
   return `<label class="f ${wide?'wide':''} ${need?'need':''}">${label}${inner}</label>`;
 }
@@ -1008,12 +1196,14 @@ function renderDrawer(){
         ${fld('e-centro','Centro',null,{list:opt(CENTROS,e.centro),need:need('centro')})}
         ${fld('e-op','Operador asignado',null,{list:opt(ops,e.operador_asignado),need:need('operador')})}
         ${fld('e-uso','Uso principal',e.uso_principal,{wide:true,need:need('uso'),ph:'Alimentación, siembra, purines…'})}
+        ${fld('e-emp','Empresa de costo (estadísticas)',e.empresa_costo,{ph:'AITUE, MAITENES…'})}
       </fieldset>
-      <fieldset><legend>Mantención</legend>
-        ${fld('e-iv','Intervalo de mantención (horas)',e.intervalo_mant_horas,{type:'number',need:need('intervalo'),ph:'250'})}
-        ${fld('e-h0','Horómetro inicial (h)',e.horometro_inicial,{type:'number',need:need('horómetro')})}
-        ${mt?`<div class="calc"><span>Horómetro actual <b>${SIN_HORAS.has(e.tipo)?'—':fmtN(horoActual(e))}</b></span><span>Próxima mantención <b>${mt.txt}</b></span></div>
-        <p class="muted" style="grid-column:1/-1;margin:0;font-size:12px">El horómetro actual se actualiza solo con las cargas de combustible y las mantenciones registradas.</p>`:''}
+      <fieldset><legend>Mantención y medidor</legend>
+        ${fld('e-unidad','Mide en',null,{list:opt([['horas','Horas (horómetro)'],['km','Kilómetros (odómetro)']],e.unidad_medidor||(['Camioneta','Camión'].includes(e.tipo)?'km':'horas'),false)})}
+        ${fld('e-iv',`Intervalo de mantención (${e.unidad_medidor==='km'?'km':'horas'})`,e.intervalo_mant_horas,{type:'number',need:need('intervalo'),ph:e.unidad_medidor==='km'?'10000':'250'})}
+        ${fld('e-h0',e.unidad_medidor==='km'?'Odómetro inicial (km)':'Horómetro inicial (h)',e.horometro_inicial,{type:'number',need:need('horómetro')})}
+        ${mt?`<div class="calc"><span>${e.unidad_medidor==='km'?'Odómetro':'Horómetro'} actual <b>${SIN_HORAS.has(e.tipo)?'—':fmtN(horoActual(e))+(e.unidad_medidor==='km'?' km':' h')}</b></span><span>Próxima mantención <b>${mt.txt}</b></span></div>
+        <p class="muted" style="grid-column:1/-1;margin:0;font-size:12px">La lectura actual se actualiza sola con las cargas de combustible y las mantenciones registradas.</p>`:''}
       </fieldset>
       <fieldset><legend>Documentos</legend>
         ${DOCS.map(([k,name])=>{const d=isNew?null:S.docs.get(id+'__'+k);return `<div class="docrow">
@@ -1044,7 +1234,8 @@ async function saveEquipo(){
   if(iv!=null&&iv<=0){S.formErr='El intervalo de mantención debe ser mayor que cero.';renderDrawer();return}
   const e={...eqRow(S.eq.get(id)||{}),id_maquina:id,n_interno:numv('e-num'),nombre:val('e-nombre'),tipo:val('e-tipo'),estado:val('e-estado'),marca:val('e-marca'),modelo:val('e-modelo'),
     anio,color:val('e-color'),patente:val('e-patente'),propietario:val('e-prop'),n_motor:val('e-motor'),n_serie:val('e-serie'),
-    centro:val('e-centro'),operador_asignado:val('e-op'),uso_principal:val('e-uso'),intervalo_mant_horas:iv,horometro_inicial:numv('e-h0',1)};
+    centro:val('e-centro'),operador_asignado:val('e-op'),uso_principal:val('e-uso'),intervalo_mant_horas:iv,horometro_inicial:numv('e-h0',1),
+    unidad_medidor:val('e-unidad')||'horas',empresa_costo:(val('e-emp')||'').toUpperCase()||null};
   const docs=[];
   for(const [k,name] of DOCS){
     let sit=val(`d-${k}-sit`)||'Sin dato'; const v=val(`d-${k}-v`);
@@ -1082,38 +1273,120 @@ const REC={
     title:(r,n)=>n?'Nueva carga de combustible':'Carga '+r.id_carga,
     sub:(r,n)=>n?'Combustible':r.fecha,
     body(r,n){
-      const lr=r.id_maquina?lastReading(r.id_maquina,r.fecha,n?null:r.id_carga):null;
+      const dt=r.dtipo||(r.id_destino?'destino':r.id_estanque_destino?'traspaso':'equipo');
+      const lr=dt==='equipo'&&r.id_maquina?lastReading(r.id_maquina,r.fecha,n?null:r.id_carga):null;
+      const ests=S.estq.filter(e=>e.activo||e.id_estanque===r.id_estanque||e.id_estanque===r.id_estanque_destino);
+      const orig=r.id_estanque===undefined?(ests[0]?.id_estanque||''):(r.id_estanque||'');
+      const pv=orig?precioVigente(r.fecha):null, stock=orig?stockAl(orig,r.fecha,n?null:r.id_carga):null;
+      const u=r.id_maquina?uCorta(r.id_maquina):'h';
       return `<fieldset><legend>Carga</legend>
         ${fld('r-fecha','Fecha',r.fecha,{type:'date'})}
         ${fld('r-litros','Litros',r.litros,{type:'number'})}
-        ${fld('r-eq','Equipo',null,{list:opt(eqList(r.id_maquina),r.id_maquina),wide:true})}
-        ${fld('r-op','Operador (quién carga)',null,{list:opt(opList(r.id_operador),r.id_operador),wide:true})}
-        ${!S.ops.size?'<p class="err" style="grid-column:1/-1;margin:0">Aún no hay operadores. Agrégalos en Equipos › Operadores para poder registrar cargas.</p>':''}
-        ${fld('r-horo','Horómetro (h)',r.horometro,{type:'number'})}
-        ${fld('r-lleno','Estanque lleno',null,{list:opt(['Sí','No'],r.estanque_lleno===false?'No':'Sí',false)})}
-        <div class="calc">${r.id_maquina?(lr?`<span>Última lectura de ${esc(r.id_maquina)} <b>${fmtN(lr.h)} h</b> ${lr.f?'el '+esc(lr.f):''} (${esc(lr.src)})</span>`:`<span>${esc(r.id_maquina)} aún no tiene lecturas de horómetro.</span>`):'<span>Elige el equipo para ver su última lectura de horómetro.</span>'}</div>
+        ${fld('r-dtipo','Destino',null,{list:opt([['equipo','Equipo'],['destino','Otro destino (bidón, servicio externo…)'],['traspaso','Traspaso a otro estanque']],dt,false),wide:true})}
+        ${dt==='equipo'?fld('r-eq','Equipo',null,{list:opt(eqList(r.id_maquina),r.id_maquina),wide:true})
+          :dt==='destino'?fld('r-des','Otro destino',null,{list:opt(S.dest.filter(d=>d.activo||d.id_destino===r.id_destino).map(d=>[d.id_destino,d.nombre+' · '+d.tipo]),r.id_destino),wide:true})
+          :fld('r-estd','Estanque que recibe',null,{list:opt(ests.filter(e=>e.id_estanque!==orig).map(e=>[e.id_estanque,e.nombre]),r.id_estanque_destino),wide:true})}
+        ${fld('r-orig','Sale de',null,{list:opt([...ests.map(e=>[e.id_estanque,e.nombre]),...(dt==='traspaso'?[]:[['','Estación de servicio (fuera del fundo)']])],orig,false)})}
+        ${fld('r-op','Chofer',null,{list:opt(opList(r.id_operador),r.id_operador)})}
+        ${!S.ops.size?'<p class="err" style="grid-column:1/-1;margin:0">Aún no hay choferes. Agrégalos en Combustible › Listas.</p>':''}
+        ${dt==='equipo'?`${fld('r-horo',r.id_maquina?lecturaLbl(r.id_maquina):'Horómetro u odómetro',r.horometro,{type:'number'})}
+          ${fld('r-lleno','Estanque del equipo lleno',null,{list:opt(['Sí','No'],r.estanque_lleno===false?'No':'Sí',false)})}`:''}
+        ${fld('r-lab','Labor (opcional)',null,{list:opt(S.labs.filter(l=>l.activo||l.labor===r.labor).map(l=>l.labor),r.labor)})}
+        ${orig?'':fld('r-precio','Precio por litro (CLP)',r.precio_litro,{type:'number'})}
+        <div class="calc">
+          ${dt==='equipo'?(r.id_maquina?(lr?`<span>Última lectura de ${esc(r.id_maquina)} <b>${fmtN(lr.h)} ${u}</b> ${lr.f?'el '+esc(lr.f):''}</span>`:`<span>${esc(r.id_maquina)} aún no tiene lecturas.</span>`):'<span>Elige el equipo para ver su última lectura.</span>'):''}
+          ${orig?`<span>Stock de ${esc(estNombre(orig))} al ${esc(r.fecha||'día')} <b class="${stock<0?'bad':''}">${fmt0(stock)} L</b></span><span>Precio <b>${pv?clp(pv.precio_litro)+'/L':'sin compras con precio'}</b>${pv?` <span class="muted">(compra del ${esc(pv.fecha)})</span>`:''}</span>`:''}
+        </div>
       </fieldset>
-      <fieldset><legend>Origen y costo</legend>
-        ${fld('r-origen','Origen',null,{list:opt(ORIGENES,r.origen)})}
-        ${fld('r-precio','Precio por litro (CLP)',r.precio_litro,{type:'number'})}
-        ${fld('r-centro','Centro (solo si trabajó fuera de su centro)',null,{list:opt(CENTROS,r.centro),wide:true})}
+      <fieldset><legend>Otros datos</legend>
+        ${dt==='equipo'?fld('r-centro','Centro (solo si trabajó fuera de su centro)',null,{list:opt(CENTROS,r.centro),wide:true}):''}
         ${fld('r-obs','Observación',r.observacion,{wide:true})}
       </fieldset>
-      <p class="note" style="margin:0">Marca “Estanque lleno” cuando se llena completo: el consumo en L/h se calcula entre dos cargas llenas.</p>`;
+      ${dt==='equipo'?'<p class="note" style="margin:0">Marca “lleno” cuando se llena completo: el rendimiento (L/h o km/L) se calcula entre dos cargas llenas. Las camionetas y camiones registran kilómetros; tractores y maquinaria, horas (se cambia en la ficha del equipo).</p>':''}`;
     },
-    read:()=>({fecha:val('r-fecha'),id_maquina:val('r-eq'),id_operador:val('r-op'),litros:numv('r-litros',1),horometro:numv('r-horo',1),estanque_lleno:val('r-lleno')!=='No',origen:val('r-origen'),precio_litro:numv('r-precio'),centro:val('r-centro'),observacion:val('r-obs')}),
+    read(){
+      const dt=val('r-dtipo')||'equipo', orig=document.getElementById('r-orig')?(val('r-orig')||null):undefined, fecha=val('r-fecha');
+      const r={dtipo:dt,fecha,litros:numv('r-litros',1),id_operador:val('r-op'),labor:val('r-lab'),observacion:val('r-obs'),
+        id_maquina:dt==='equipo'?val('r-eq'):null,id_destino:dt==='destino'?val('r-des'):null,id_estanque_destino:dt==='traspaso'?val('r-estd'):null,
+        id_estanque:orig,horometro:dt==='equipo'?numv('r-horo',1):null,estanque_lleno:dt==='equipo'?val('r-lleno')!=='No':false,centro:dt==='equipo'?val('r-centro'):null};
+      r.origen=orig?'Estanque fundo':'Estación de servicio';
+      r.precio_litro=orig?(precioVigente(fecha)?.precio_litro??null):numv('r-precio',2);
+      return r;
+    },
     check(r){
       if(!r.fecha) return 'Indica la fecha de la carga.';
-      if(!r.id_maquina) return 'Elige el equipo.';
-      if(!r.id_operador) return S.ops.size?'Elige quién hizo la carga.':'Primero agrega operadores en Equipos › Operadores.';
       if(!(r.litros>0)) return 'Los litros deben ser mayores que cero.';
-      if(r.horometro==null&&usaHoras(r.id_maquina)) return 'Indica el horómetro: con él se calcula el horómetro actual y el consumo en L/h.';
+      if(r.dtipo==='equipo'&&!r.id_maquina) return 'Elige el equipo.';
+      if(r.dtipo==='destino'&&!r.id_destino) return 'Elige el destino.';
+      if(r.dtipo==='traspaso'&&(!r.id_estanque||!r.id_estanque_destino)) return 'Un traspaso necesita el estanque que entrega y el que recibe.';
+      if(!r.id_operador) return S.ops.size?'Elige el chofer.':'Primero agrega choferes en Combustible › Listas.';
+      if(r.dtipo==='equipo'&&r.horometro==null&&usaHoras(r.id_maquina)) return `Indica el ${unidadDe(r.id_maquina)==='km'?'odómetro (km)':'horómetro'}: con él se calcula el rendimiento y la próxima mantención.`;
       if(r.precio_litro!=null&&r.precio_litro<0) return 'El precio no puede ser negativo.';
     },
-    warn:(r,n,key)=>horoWarn(r,n?null:key),
-    async save(r,n,key){if(n) await must(sb.from('combustible').insert(r)); else await must(sb.from('combustible').update(r).eq('id_carga',key))},
+    warn(r,n,key){
+      if(r.id_estanque){const s=stockAl(r.id_estanque,r.fecha,n?null:key);if(r.litros>s) return `${estNombre(r.id_estanque)} quedaría con stock negativo: al ${r.fecha} tenía ${fmt0(s)} L registrados. Revisa los litros o registra el ingreso que falta, o pulsa “Guardar igual”.`}
+      return r.dtipo==='equipo'?horoWarn(r,n?null:key):'';
+    },
+    async save(r,n,key){
+      const {dtipo,...row}=r;
+      if(n) await must(sb.from('combustible').insert(row)); else await must(sb.from('combustible').update(row).eq('id_carga',key));
+    },
     async del(key){await must(sb.from('combustible').delete().eq('id_carga',key))},
     done:'Carga guardada',after:['combustible','mantenciones','base']
+  },
+  ing:{
+    title:(r,n)=>n?'Ingreso de combustible':'Ingreso '+r.id_ingreso,
+    sub:(r,n)=>n?'Estanques':r.fecha,
+    body(r,n){
+      const t=r.tipo||'Compra';
+      return `<fieldset><legend>Ingreso al estanque</legend>
+        ${fld('r-fecha','Fecha',r.fecha,{type:'date'})}
+        ${fld('r-est','Estanque',null,{list:opt(S.estq.filter(e=>e.activo||e.id_estanque===r.id_estanque).map(e=>[e.id_estanque,e.nombre]),r.id_estanque||S.estq[0]?.id_estanque,false)})}
+        ${fld('r-tipo','Tipo',null,{list:opt([['Compra','Compra (reposición)'],['Saldo inicial','Saldo inicial'],['Ajuste','Ajuste (positivo o negativo)']],t,false)})}
+        ${fld('r-litros','Litros',r.litros,{type:'number'})}
+        ${fld('r-precio','Precio por litro (CLP)',r.precio_litro,{type:'number'})}
+        ${fld('r-prov','Proveedor',r.proveedor)}
+        ${fld('r-doc','Guía o factura',r.documento)}
+        ${fld('r-obs','Observación',r.observacion,{wide:true})}
+        ${r.litros&&r.precio_litro?`<div class="calc"><span>Total <b>${clp(r.litros*r.precio_litro)}</b></span></div>`:''}
+      </fieldset>
+      <p class="note" style="margin:0">El precio de la última compra se usa para valorizar los despachos desde los estanques. Usa “Ajuste” para corregir el stock después de una medición.</p>`;
+    },
+    read:()=>({fecha:val('r-fecha'),id_estanque:val('r-est'),tipo:val('r-tipo'),litros:numv('r-litros',1),precio_litro:numv('r-precio',2),proveedor:val('r-prov'),documento:val('r-doc'),observacion:val('r-obs')}),
+    check(r){
+      if(!r.fecha||!r.id_estanque) return 'Indica la fecha y el estanque.';
+      if(!r.litros) return 'Indica los litros.';
+      if(r.tipo!=='Ajuste'&&r.litros<0) return 'Solo los ajustes pueden ser negativos.';
+      if(r.precio_litro!=null&&r.precio_litro<0) return 'El precio no puede ser negativo.';
+    },
+    warn:r=>r.tipo==='Compra'&&r.precio_litro==null?'La compra no tiene precio: los despachos seguirán valorizados con el precio de la compra anterior. Pulsa “Guardar igual” si no lo tienes.':'',
+    async save(r,n,key){if(n) await must(sb.from('combustible_ingresos').insert(r)); else await must(sb.from('combustible_ingresos').update(r).eq('id_ingreso',key))},
+    async del(key){await must(sb.from('combustible_ingresos').delete().eq('id_ingreso',key))},
+    done:'Ingreso guardado',after:['combustible']
+  },
+  med:{
+    title:(r,n)=>n?'Medición de estanque':'Medición '+estNombre(r.id_estanque),
+    sub:(r,n)=>n?'Estanques':r.fecha,
+    body(r,n){
+      const est=r.id_estanque||S.cb.est||S.estq[0]?.id_estanque, calc=est&&r.fecha?stockAl(est,r.fecha):null;
+      return `<fieldset><legend>Medición física</legend>
+        ${fld('r-est','Estanque',null,{list:opt(S.estq.map(e=>[e.id_estanque,e.nombre]),est,false),ro:!n})}
+        ${fld('r-fecha','Fecha',r.fecha,{type:'date',ro:!n})}
+        ${fld('r-med','Litros medidos (varilla o medidor)',r.litros_medidos,{type:'number'})}
+        ${fld('r-obs','Observación',r.observacion)}
+        ${calc!=null?`<div class="calc"><span>Stock calculado al ${esc(r.fecha)} <b>${fmt0(calc)} L</b></span>${r.litros_medidos!=null?`<span>Diferencia <b class="${Math.abs(r.litros_medidos-calc)>20?'bad':''}">${r.litros_medidos-calc>0?'+':''}${fmt0(r.litros_medidos-calc)} L</b></span>`:''}</div>`:''}
+      </fieldset>`;
+    },
+    read:()=>({id_estanque:val('r-est'),fecha:val('r-fecha'),litros_medidos:numv('r-med',1),observacion:val('r-obs')}),
+    check(r,n){
+      if(!r.id_estanque||!r.fecha) return 'Indica el estanque y la fecha.';
+      if(r.litros_medidos==null||r.litros_medidos<0) return 'Indica los litros medidos.';
+      if(n&&S.med.some(m=>m.id_estanque===r.id_estanque&&m.fecha===r.fecha)) return 'Ya hay una medición de ese estanque en esa fecha. Ábrela para corregirla.';
+    },
+    warn:()=>'',
+    async save(r){await upsert('estanque_mediciones',[r],'id_estanque,fecha')},
+    async del(key){const [id_estanque,fecha]=key.split('|');await must(sb.from('estanque_mediciones').delete().match({id_estanque,fecha}))},
+    done:'Medición guardada',after:['combustible']
   },
   mant:{
     title:(r,n)=>n?'Nueva intervención':'Intervención '+r.id_intervencion,
@@ -1125,9 +1398,9 @@ const REC={
         ${fld('r-tipo','Tipo',null,{list:opt(['Preventiva','Correctiva'],r.tipo,false)})}
         ${fld('r-eq','Equipo',null,{list:opt(eqList(r.id_maquina),r.id_maquina),wide:true})}
         ${fld('r-sis','Sistema',null,{list:opt(SISTEMAS,r.sistema)})}
-        ${fld('r-horo','Horómetro (h)',r.horometro,{type:'number',ph:'Obligatorio en preventivas'})}
+        ${fld('r-horo',r.id_maquina?lecturaLbl(r.id_maquina):'Horómetro u odómetro',r.horometro,{type:'number',ph:'Obligatorio en preventivas'})}
         ${fld('r-desc','Descripción',r.descripcion,{wide:true,ph:'Cambio de aceite y filtros 250 h'})}
-        ${e?`<div class="calc"><span>Intervalo <b>${e.intervalo_mant_horas==null?'sin plan':fmt0(e.intervalo_mant_horas)+' h'}</b></span><span>Horómetro actual <b>${fmtN(horoActual(e))}</b></span><span>Próxima <b>${mt.txt}</b></span></div>`:''}
+        ${e?`<div class="calc"><span>Intervalo <b>${e.intervalo_mant_horas==null?'sin plan':fmt0(e.intervalo_mant_horas)+(e.unidad_medidor==='km'?' km':' h')}</b></span><span>Lectura actual <b>${fmtN(horoActual(e))}${e.unidad_medidor==='km'?' km':' h'}</b></span><span>Próxima <b>${mt.txt}</b></span></div>`:''}
       </fieldset>
       <fieldset><legend>Costo y taller</legend>
         ${fld('r-rep','Repuestos (CLP)',r.costo_repuestos,{type:'number'})}
@@ -1136,6 +1409,8 @@ const REC={
         ${fld('r-prov','Proveedor',r.proveedor)}
         ${fld('r-dias','Días fuera de servicio',r.dias_fuera_servicio,{type:'number'})}
       </fieldset>
+      ${n?'':(()=>{const fs=S.fact.filter(f=>f.id_intervencion===r.id_intervencion);return fs.length?`<fieldset><legend>Facturas de esta intervención</legend><div style="grid-column:1/-1;display:flex;flex-direction:column;gap:6px">
+        ${fs.map(f=>`<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:13px"><span>${esc(f.fecha)} · ${esc(f.proveedor||'Sin proveedor')} · ${esc(docCorto(f))}</span><b class="num">${clp((+f.monto_neto||0)+(+f.monto_exento||0))}</b><button class="btn ghost" type="button" data-act="fact-pdf" data-path="${esc(f.archivo)}">Ver PDF</button></div>`).join('')}</div></fieldset>`:''})()}
       <p class="note" style="margin:0">Si no separas repuestos y mano de obra, pon el total en Repuestos y deja Mano de obra en 0.</p>`;
     },
     read:()=>({fecha:val('r-fecha'),id_maquina:val('r-eq'),tipo:val('r-tipo'),sistema:val('r-sis'),descripcion:val('r-desc'),horometro:numv('r-horo',1),costo_repuestos:numv('r-rep')??0,costo_mano_obra:numv('r-mo')??0,proveedor:val('r-prov'),tipo_taller:val('r-taller'),dias_fuera_servicio:numv('r-dias',1)}),
@@ -1236,8 +1511,196 @@ const REC={
     async save(r){await upsert('leche',[r],'fecha,sala')},
     async del(key){const [fecha,sala]=key.split('|');await must(sb.from('leche').delete().match({fecha,sala}))},
     done:'Registro guardado',after:['leche','rebano']
+  },
+  fact:{
+    title:(r,n)=>n?'Cargar factura':docCorto(r),
+    sub:(r,n)=>n?'Mantenciones':(r.proveedor||'')+' · '+r.fecha,
+    body(r,n){
+      const cu=cuadreFactura(r);
+      const ints=S.mant.filter(m=>m.id_maquina===r.id_maquina).sort((a,b)=>b.fecha.localeCompare(a.fecha)||byId(b.id_intervencion,a.id_intervencion))
+        .map(m=>[m.id_intervencion,`${m.id_intervencion} · ${m.fecha} · ${m.tipo}${m.descripcion?' · '+m.descripcion.slice(0,40):''}`]);
+      const v=r.vinculo||'nueva';
+      return `<fieldset><legend>Documento</legend>
+        ${n?`<div class="drop"><label class="f">Archivo PDF de la factura<input class="field" type="file" id="r-pdf" accept="application/pdf,.pdf"></label>
+          <span class="${S.rec.msg&&/Revísalos/.test(S.rec.msg)?'ok':'muted'}">${esc(S.rec.msg||(r.nombre_archivo?r.nombre_archivo:'La página lee el texto de la factura electrónica (SII) y llena los campos. Las facturas escaneadas se completan a mano.'))}</span></div>`
+          :`<div class="calc"><span>${esc(r.nombre_archivo||'PDF')}</span><button class="btn ghost" type="button" data-act="fact-pdf" data-path="${esc(r.archivo)}">Ver PDF</button>${r.id_intervencion?`<span>Intervención <b>${esc(r.id_intervencion)}</b></span>`:''}</div>`}
+        ${fld('r-eq','Equipo',null,{list:opt(eqList(r.id_maquina),r.id_maquina),wide:true})}
+        ${fld('r-fecha','Fecha de emisión',r.fecha,{type:'date'})}
+        ${fld('r-tdoc','Tipo de documento',null,{list:opt(TIPOS_DOC,r.tipo_documento||'Factura electrónica',false)})}
+        ${fld('r-prov','Proveedor',r.proveedor)}${fld('r-rut','RUT del proveedor',r.rut_proveedor,{ph:'76.123.456-7'})}
+        ${fld('r-folio','N° de folio',r.folio)}
+        ${fld('r-det','Detalle (servicio o productos)',r.detalle,{type:'area',wide:true})}
+      </fieldset>
+      <fieldset><legend>Montos (CLP)</legend>
+        ${fld('r-neto','Neto',r.monto_neto,{type:'number'})}${fld('r-exento','Exento',r.monto_exento,{type:'number'})}
+        ${fld('r-iva','IVA',r.iva,{type:'number'})}${fld('r-total','Total',r.monto_total,{type:'number'})}
+        <div class="calc"><span class="${cu.ok?'ok':'gap'}">${esc(cu.txt)}</span><span>Costo para la mantención (sin IVA) <b>${clp(COSTO_FACT(r))}</b></span></div>
+      </fieldset>
+      ${n?`<fieldset><legend>Mantención</legend>
+        ${fld('r-vinc','Qué hacer con el costo',null,{list:opt([['nueva','Crear una intervención nueva'],['existente','Sumar a una intervención existente'],['ninguno','Solo guardar la factura']],v,false),wide:true})}
+        ${v==='existente'?(ints.length?fld('r-int','Intervención',null,{list:opt(ints,r.id_intervencion),wide:true}):'<p class="err" style="grid-column:1/-1;margin:0">Este equipo aún no tiene intervenciones. Elige “Crear una intervención nueva”.</p>'):''}
+        ${v==='nueva'?`${fld('r-mtipo','Tipo',null,{list:opt(['Correctiva','Preventiva'],r.mtipo||'Correctiva',false)})}${fld('r-msis','Sistema',null,{list:opt(SISTEMAS,r.msis)})}
+          ${fld('r-mhoro','Horómetro (h)',r.mhoro,{type:'number',ph:'Obligatorio en preventivas'})}`:''}
+        ${v!=='ninguno'?fld('r-cargo','Cargar el costo como',null,{list:opt([['rep','Repuestos'],['mo','Mano de obra']],r.cargo||'rep',false)}):''}
+      </fieldset>`:'<p class="note" style="margin:0">Cambiar los montos aquí no modifica el costo ya cargado en la intervención.</p>'}`;
+    },
+    read(){
+      const r={id_maquina:val('r-eq'),fecha:val('r-fecha'),tipo_documento:val('r-tdoc'),proveedor:val('r-prov'),rut_proveedor:(val('r-rut')||'').replace(/\s/g,'').toUpperCase()||null,folio:val('r-folio'),detalle:val('r-det'),
+        monto_neto:numv('r-neto'),monto_exento:numv('r-exento'),iva:numv('r-iva'),monto_total:numv('r-total')};
+      if(document.getElementById('r-vinc')){r.vinculo=val('r-vinc');r.id_intervencion=val('r-int');r.mtipo=val('r-mtipo');r.msis=val('r-msis');r.mhoro=numv('r-mhoro',1);r.cargo=val('r-cargo')}
+      return r;
+    },
+    check(r,n,key){
+      if(n&&!S.rec.file) return 'Elige el PDF de la factura.';
+      if(!r.id_maquina) return 'Elige el equipo al que corresponde la factura.';
+      if(!r.fecha) return 'Indica la fecha de emisión.';
+      if(r.monto_total==null&&r.monto_neto==null&&r.monto_exento==null) return 'Indica al menos el neto o el total.';
+      if([r.monto_neto,r.monto_exento,r.iva,r.monto_total].some(x=>x!=null&&x<0)) return 'Los montos no pueden ser negativos.';
+      if(r.folio&&r.rut_proveedor&&S.fact.some(f=>String(f.id)!==String(key)&&f.folio===r.folio&&f.rut_proveedor===r.rut_proveedor&&f.tipo_documento===r.tipo_documento)) return `Esa factura (${r.rut_proveedor}, folio ${r.folio}) ya está cargada.`;
+      if(n&&r.vinculo==='existente'&&!r.id_intervencion) return 'Elige la intervención a la que se suma el costo.';
+      if(n&&r.vinculo==='nueva'&&r.mtipo==='Preventiva'&&r.mhoro==null) return 'Las preventivas necesitan el horómetro.';
+      if(n&&r.vinculo!=='ninguno'&&r.tipo_documento==='Nota de crédito electrónica') return 'Las notas de crédito no suman costo: elige “Solo guardar la factura” y corrige el costo en la intervención.';
+    },
+    warn(r){const cu=cuadreFactura(r);return cu.ok?'':`${cu.txt}. Revisa los montos, o pulsa “Guardar igual”.`},
+    async save(r,n,key){
+      const row=Object.fromEntries(FACT_COLS.map(k=>[k,r[k]??null]));
+      if(!n){await must(sb.from('facturas').update(row).eq('id',key));return}
+      const file=S.rec.file, path=`${r.id_maquina}/${r.fecha}_${(r.folio||'sf').replace(/[^\w-]/g,'')}_${Date.now()}.pdf`;
+      const up=await sb.storage.from('facturas').upload(path,file,{contentType:'application/pdf'});
+      if(up.error) throw up.error;
+      const ins=await sb.from('facturas').insert({...row,archivo:path,nombre_archivo:file.name}).select('id').single();
+      if(ins.error){await sb.storage.from('facturas').remove([path]);throw ins.error}
+      const costo=COSTO_FACT(r), campo=r.cargo==='mo'?'costo_mano_obra':'costo_repuestos';
+      let idInt=null;
+      if(r.vinculo==='nueva'){
+        const m={fecha:r.fecha,id_maquina:r.id_maquina,tipo:r.mtipo||'Correctiva',sistema:r.msis,descripcion:r.detalle?r.detalle.slice(0,300):null,horometro:r.mhoro,
+          costo_repuestos:campo==='costo_repuestos'?costo:0,costo_mano_obra:campo==='costo_mano_obra'?costo:0,proveedor:r.proveedor,tipo_taller:'Externo'};
+        const res=await sb.from('mantenciones').insert(m).select('id_intervencion').single();
+        if(res.error) throw res.error;
+        idInt=res.data.id_intervencion;
+      }else if(r.vinculo==='existente'){
+        const cur=S.mant.find(m=>m.id_intervencion===r.id_intervencion);
+        const upd={[campo]:(+cur[campo]||0)+costo};
+        if(!cur.proveedor&&r.proveedor) upd.proveedor=r.proveedor;
+        await must(sb.from('mantenciones').update(upd).eq('id_intervencion',r.id_intervencion));
+        idInt=r.id_intervencion;
+      }
+      if(idInt) await must(sb.from('facturas').update({id_intervencion:idInt}).eq('id',ins.data.id));
+      S.rec.done=idInt?(r.vinculo==='nueva'?`Factura guardada y ${idInt} creada con ${clp(costo)}`:`Factura guardada y ${clp(costo)} sumados a ${idInt}`):'Factura guardada';
+    },
+    async del(key){
+      const f=S.fact.find(x=>String(x.id)===String(key));
+      await must(sb.from('facturas').delete().eq('id',key));
+      if(f?.archivo) await sb.storage.from('facturas').remove([f.archivo]);
+    },
+    done:'Factura guardada',after:['mantenciones','combustible','base']
   }
 };
+/* ---------- facturas en PDF ---------- */
+const TIPOS_DOC=['Factura electrónica','Factura exenta electrónica','Nota de crédito electrónica','Boleta electrónica','Otro'];
+const docCorto=f=>(f.tipo_documento==='Factura electrónica'?'Factura':f.tipo_documento==='Factura exenta electrónica'?'Factura exenta':f.tipo_documento==='Nota de crédito electrónica'?'Nota de crédito':f.tipo_documento||'')+(f.folio?' N° '+f.folio:'');
+if(window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+/* Texto del PDF reconstruido en líneas (de arriba hacia abajo, de izquierda a derecha). */
+async function pdfLineas(file){
+  const pdf=await pdfjsLib.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise;
+  const lineas=[];
+  for(let p=1;p<=Math.min(pdf.numPages,4);p++){
+    const tc=await (await pdf.getPage(p)).getTextContent();
+    const filas=[];
+    for(const it of tc.items){
+      if(!it.str||!it.str.trim()) continue;
+      const x=it.transform[4],y=it.transform[5];
+      let f=filas.find(f=>Math.abs(f.y-y)<3);
+      if(!f){f={y,items:[]};filas.push(f)}
+      f.items.push({x,s:it.str.trim()});
+    }
+    filas.sort((a,b)=>b.y-a.y);
+    for(const f of filas) lineas.push(f.items.sort((a,b)=>a.x-b.x).map(i=>i.s).join('  '));
+  }
+  return lineas;
+}
+const sinTilde=s=>s.normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase();
+const MESES_ES={ENERO:1,FEBRERO:2,MARZO:3,ABRIL:4,MAYO:5,JUNIO:6,JULIO:7,AGOSTO:8,SEPTIEMBRE:9,SETIEMBRE:9,OCTUBRE:10,NOVIEMBRE:11,DICIEMBRE:12};
+function fechaDe(s){
+  const u=sinTilde(s);let m;
+  if((m=u.match(/(\d{1,2})\s+DE\s+([A-Z]+)\s+(?:DE|DEL)\s+(\d{4})/))&&MESES_ES[m[2]]) return `${m[3]}-${String(MESES_ES[m[2]]).padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+  if((m=u.match(/\b(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})\b/))) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+  if((m=u.match(/\b(\d{4})-(\d{2})-(\d{2})\b/))) return `${m[1]}-${m[2]}-${m[3]}`;
+  return null;
+}
+/* Último monto de una línea, en formato chileno (1.234.567 o 1234567). */
+function montoDe(s){const ms=[...s.replace(/\$\s*/g,'$').matchAll(/(\d{1,3}(?:\.\d{3})+|\d+)(?:,\d+)?/g)];if(!ms.length)return null;const v=+ms[ms.length-1][1].replace(/\./g,'');return isNaN(v)?null:v}
+const RE_RUT=/(\d{1,2}\.?\d{3}\.?\d{3}\s*-\s*[\dkK])/;
+/* Reglas para la factura electrónica del SII: recuadro con RUT, tipo y folio; fecha de emisión; detalle; totales. */
+function leerFactura(lineas){
+  const U=lineas.map(sinTilde), r={};
+  const iTipo=U.findIndex(l=>/(FACTURA|NOTA DE CREDITO|BOLETA)/.test(l)&&/ELECTRONICA/.test(l));
+  const tipoTxt=iTipo>=0?U[iTipo]:U.find(l=>/FACTURA|BOLETA|NOTA DE CREDITO/.test(l))||'';
+  r.tipo_documento=/NOTA DE CREDITO/.test(tipoTxt)?'Nota de crédito electrónica':/EXENTA/.test(tipoTxt)?'Factura exenta electrónica':/BOLETA/.test(tipoTxt)?'Boleta electrónica':/FACTURA/.test(tipoTxt)?'Factura electrónica':'Otro';
+  /* folio: "N° 12345" cerca del tipo de documento */
+  const zona=iTipo>=0?U.slice(Math.max(0,iTipo-2),iTipo+4):U.slice(0,15);
+  for(const l of zona){const m=l.match(/(?:\bN\s*[O°º.]*|FOLIO|NUMERO)\s*:?\s*(\d{1,10})\b/);if(m){r.folio=m[1];break}}
+  /* RUT del emisor: el del recuadro (junto al tipo de documento) o el primero del documento */
+  for(const l of zona){const m=l.match(RE_RUT);if(m){r.rut_proveedor=m[1].replace(/\s/g,'').toUpperCase();break}}
+  if(!r.rut_proveedor){const l=U.find(l=>RE_RUT.test(l));if(l)r.rut_proveedor=l.match(RE_RUT)[1].replace(/\s/g,'').toUpperCase()}
+  /* razón social: primera línea con texto que no sea parte del recuadro ni un dato */
+  const prov=lineas.find((l,i)=>/[A-Za-zÁÉÍÓÚÑ]{3}/.test(l)&&!/R\.?\s*U\.?\s*T|RUT|FACTURA|ELECTRONICA|S\.?I\.?I|GIRO|DIRECCION|FONO|EMAIL|E-MAIL|WWW|CASA MATRIZ|SUCURSAL|BOLETA|NOTA DE/.test(U[i]));
+  if(prov) r.proveedor=prov.replace(/\s{2,}.*/,'').trim();
+  /* fecha de emisión */
+  const iF=U.findIndex(l=>/FECHA\s*(DE\s*)?EMISION/.test(l));
+  r.fecha=(iF>=0&&(fechaDe(lineas[iF])||fechaDe(lineas[iF+1]||'')))||lineas.map(fechaDe).find(Boolean)||null;
+  /* montos: último número de la línea con la etiqueta (o de la siguiente) */
+  const monto=re=>{for(let i=U.length-1;i>=0;i--){if(re.test(U[i])){const v=montoDe(U[i].replace(re,' '));if(v!=null)return v;const w=montoDe(U[i+1]||'');if(w!=null)return w}}return null};
+  r.monto_neto=monto(/MONTO\s+NETO|\bNETO\b/);
+  r.monto_exento=monto(/MONTO\s+EXENTO|^\s*EXENTO\b/);
+  r.iva=monto(/\bI\.?\s*V\.?\s*A\b\.?\s*(\(?\s*19\s*%\s*\)?)?/);
+  r.monto_total=monto(/^\s*(MONTO\s+)?TOTAL\b|\bTOTAL\s*\$|\bMONTO\s+TOTAL\b/);
+  if(r.monto_total==null&&r.monto_neto!=null) r.monto_total=(r.monto_neto||0)+(r.iva||0)+(r.monto_exento||0);
+  if(r.monto_neto==null&&r.monto_total!=null&&r.iva!=null) r.monto_neto=r.monto_total-r.iva-(r.monto_exento||0);
+  /* detalle: líneas entre el encabezado de la tabla de ítems y los totales, sin las cifras */
+  const iIni=U.findIndex(l=>/DESCRIPCION|DETALLE|\bITEM\b|CODIGO/.test(l));
+  /* fin del detalle: totales, referencias, timbre o el monto en palabras ("SON SEISCIENTOS…") */
+  let iFin=U.findIndex((l,i)=>i>iIni&&/MONTO\s+NETO|\bNETO\b|SUBTOTAL|REFERENCIA|TIMBRE|FORMA DE PAGO|^\s*SON\b|OBSERVACION/.test(l));
+  if(iIni>=0){
+    if(iFin<0) iFin=Math.min(U.length,iIni+12);
+    const det=lineas.slice(iIni+1,iFin).map(l=>l.split(/\s{2,}/).filter(p=>/[A-Za-zÁÉÍÓÚÑ]{3}/.test(p)&&!/^\$/.test(p)).join(' ').replace(/(\s+[\d.,]+)+$/,'').trim()).filter(Boolean);
+    /* sin repetidos: muchos PDF repiten la descripción en una segunda línea */
+    r.detalle=[...new Map(det.map(d=>[sinTilde(d),d])).values()].join('; ').slice(0,500)||null;
+  }
+  return r;
+}
+function cuadreFactura(r){
+  const n=r.monto_neto||0,e=r.monto_exento||0,i=r.iva||0,t=r.monto_total;
+  if(t==null) return {ok:false,txt:'Falta el total'};
+  const okSuma=Math.abs(n+e+i-t)<=2, okIva=!n||Math.abs(Math.round(n*0.19)-i)<=2;
+  return {ok:okSuma&&okIva,txt:okSuma&&okIva?'Neto + IVA + exento = total ✓':!okSuma?`Neto + IVA + exento (${clp(n+e+i)}) no da el total (${clp(t)})`:`El IVA (${clp(i)}) no es el 19 % del neto (${clp(Math.round(n*0.19))})`};
+}
+async function cargarPdf(file){
+  if(!S.rec||S.rec.kind!=='fact') return;
+  const d=S.rec.data;
+  if(file.type&&file.type!=='application/pdf'){S.formErr='El archivo debe ser un PDF.';renderDrawer();return}
+  if(file.size>10*1024*1024){S.formErr='El PDF pesa más de 10 MB.';renderDrawer();return}
+  S.rec.file=file;d.nombre_archivo=file.name;S.formErr='';S.rec.msg='Leyendo el PDF…';renderDrawer();
+  try{
+    if(!window.pdfjsLib) throw new Error('lector');
+    const lineas=await pdfLineas(file);S.rec.lineas=lineas;
+    if(lineas.join('').replace(/\s/g,'').length<40){S.rec.msg='El PDF no trae texto (parece escaneado o una foto). Completa los datos a mano.';renderDrawer();return}
+    const r=leerFactura(lineas);
+    for(const [k,v] of Object.entries(r)) if(v!=null&&v!=='') d[k]=v;
+    const enc=['fecha','proveedor','folio','monto_total'].filter(k=>d[k]!=null).length;
+    S.rec.msg=enc===4?'Datos leídos del PDF. Revísalos antes de guardar.':'Leí parte de los datos; completa lo que falte.';
+  }catch(e){S.rec.msg='No pude leer el PDF. Completa los datos a mano.'}
+  renderDrawer();
+}
+async function verPdf(path){
+  const w=window.open('','_blank');
+  const {data,error}=await sb.storage.from('facturas').createSignedUrl(path,600);
+  if(error||!data){if(w)w.close();toast('No se pudo abrir el PDF: '+(error?.message||'sin respuesta'));return}
+  if(w) w.location.href=data.signedUrl; else location.href=data.signedUrl;
+}
+const COSTO_FACT=r=>(r.monto_neto||0)+(r.monto_exento||0);
+const FACT_COLS=['id_maquina','tipo_documento','folio','rut_proveedor','proveedor','fecha','detalle','monto_neto','monto_exento','iva','monto_total'];
+
 function horoWarn(r,excl){
   if(r.horometro==null||!r.id_maquina) return '';
   const lr=lastReading(r.id_maquina,r.fecha,excl);
@@ -1250,13 +1713,20 @@ function openRec(kind,key){
   else if(kind==='mant') data={...S.mant.find(r=>r.id_intervencion===key)};
   else if(kind==='reb'){const g=rebGroups().find(g=>g.key===key);data={fecha:g.fecha,centro:g.centro,lote:g.lote,counts:{...g.counts},obs:[...g.obs].join(' · ')||null}}
   else if(kind==='leche'){const [f,s]=key.split('|');data={...S.leche.find(r=>r.fecha===f&&r.sala===s)}}
+  else if(kind==='fact') data={...S.fact.find(f=>String(f.id)===String(key))};
+  else if(kind==='ing') data={...S.ing.find(i=>i.id_ingreso===key)};
+  else if(kind==='med'){const [e,f]=key.split('|');data={...S.med.find(m=>m.id_estanque===e&&m.fecha===f)}}
   S.rec={kind,key,isNew:false,data};S.formErr='';S.warn='';S.warnAck=false;S.confirmDel=false;renderDrawer();
 }
 function newRec(kind){
-  const d={comb:{fecha:hoy(),estanque_lleno:true,origen:'Estanque fundo',id_maquina:S.cb.eq!=='Todos'?S.cb.eq:null},
+  const fe=S.cb.eq, esDes=/^DES-/.test(fe);
+  const d={comb:{fecha:hoy(),estanque_lleno:true,dtipo:esDes?'destino':'equipo',id_maquina:fe!=='Todos'&&!esDes?fe:null,id_destino:esDes?fe:null},
+    ing:{fecha:hoy(),tipo:'Compra',id_estanque:S.cb.est||S.estq[0]?.id_estanque},
+    med:{fecha:hoy(),id_estanque:S.cb.est||S.estq[0]?.id_estanque},
     mant:{fecha:hoy(),tipo:'Preventiva',costo_repuestos:0,costo_mano_obra:0,id_maquina:S.mt.eq!=='Todos'?S.mt.eq:null},
     reb:{fecha:hoy(),centro:S.rb.centro!=='Todos'?S.rb.centro:null,lote:'',counts:{}},
-    leche:{fecha:hoy(),sala:S.lc.sala!=='Todos'?S.lc.sala:null}}[kind];
+    leche:{fecha:hoy(),sala:S.lc.sala!=='Todos'?S.lc.sala:null},
+    fact:{id_maquina:S.mt.eq!=='Todos'?S.mt.eq:null,tipo_documento:'Factura electrónica',vinculo:'nueva',mtipo:'Correctiva',cargo:'rep'}}[kind];
   S.rec={kind,key:null,isNew:true,data:d};S.formErr='';S.warn='';S.warnAck=false;S.confirmDel=false;renderDrawer();
 }
 function closeRec(){S.rec=null;S.formErr='';S.warn='';S.warnAck=false;S.confirmDel=false;renderDrawer()}
@@ -1286,12 +1756,12 @@ async function saveRec(){
   if(S.saving||!S.rec) return;
   const {kind,isNew,key}=S.rec, M=REC[kind];
   const r=M.read(); S.rec.data={...S.rec.data,...r};
-  const bad=M.check(r,isNew);
+  const bad=M.check(r,isNew,key);
   if(bad){S.formErr=bad;renderDrawer();return}
   const w=S.warnAck?'':M.warn(r,isNew,key);
   if(w){S.warn=w;S.warnAck=true;S.formErr='';renderDrawer();return}
   S.formErr='';S.saving=true;renderDrawer();
-  try{await M.save(r,isNew,key);S.saving=false;closeRec();toast(M.done);await afterWrite(M.after)}
+  try{await M.save(r,isNew,key);S.saving=false;const msg=S.rec.done||M.done;closeRec();toast(msg);await afterWrite(M.after)}
   catch(e){S.saving=false;S.formErr=errMsg(e);renderDrawer()}
 }
 async function deleteRec(){
@@ -1335,6 +1805,7 @@ async function importReg(kind,file){
   if(typeof XLSX==='undefined'){toast('No se pudo cargar el lector de Excel. Recarga la página.');return}
   let wb;try{wb=XLSX.read(await file.arrayBuffer())}catch(e){toast('El archivo no se pudo leer como Excel.');return}
   const issues=[];let rows=[],table,conflict;
+  if(kind==='combustible'&&wb.SheetNames.some(n=>key(n)==='base_datos')){await importarBasePetroleo(wb);return}
   if(kind==='combustible'){
     const src=sheetRows(wb,['cargas','combustible']);
     if(!src){toast('No encontré la hoja “Cargas” en el archivo.');return}
@@ -1413,6 +1884,70 @@ async function importReg(kind,file){
   catch(e){toast(errMsg(e));await loadMod(kind);return}
   toast(`${fmt0(rows.length)} filas importadas${issues.length?` · ${issues.length} omitidas`:''}`);
   await afterWrite(kind==='combustible'||kind==='mantenciones'?['combustible','mantenciones','base']:kind==='leche'?['leche','rebano']:['rebano']);
+}
+/* Importación de la planilla de petróleo del fundo (hoja "Base Datos"): reposiciones → ingresos al estanque,
+   despachos → cargas (a equipo, otro destino o traspaso a estanque), saldo inicial desde la columna EXISTENCIA.
+   Se reconoce por nombre: equipos (nombre de la ficha), otros destinos, estanques y choferes de las Listas.
+   Cada fila lleva una clave (ref_externa), así que reimportar la misma planilla actualiza en vez de duplicar. */
+const ALIAS_EQUIPO={'CHRISTIAN LANDMANN (1)':'CA-01'};   // dos camionetas comparten el nombre; la de la planilla es la F-150
+async function importarBasePetroleo(wb){
+  const src=sheetRows(wb,['base_datos']);
+  const N=s=>sinTilde(String(s??'')).replace(/\s+/g,' ').trim();
+  const eqBy=new Map();for(const e of S.eq.values()){const k=N(e.nombre);eqBy.set(k,eqBy.has(k)?null:e.id_maquina)}
+  const desBy=new Map(S.dest.map(d=>[N(d.nombre),d.id_destino])), estBy=new Map(S.estq.map(e=>[N(e.nombre),e.id_estanque]));
+  const opBy=new Map([...S.ops.values()].map(o=>[N(o.nombre),o.id_operador])), labBy=new Map(S.labs.map(l=>[N(l.labor),l.labor]));
+  const issues=[], ings=[], cargas=[], vistos=new Map();
+  const ref=p=>{const k=p.join('|'),n=(vistos.get(k)||0)+1;vistos.set(k,n);return 'BDP:'+k+'#'+n};
+  const filas=src.map((r,i)=>({r,i,f:`Fila ${i+2}`,fecha:toISO(r.fecha),est:estBy.get(N(r.estanque_de_despacho))}));
+  /* saldo inicial: la primera fila con existencia (la planilla lleva la existencia del estanque principal) */
+  const p0=filas.find(x=>nm(x.r.existencia_petroleo_litros)!=null&&x.fecha&&x.est);
+  if(p0){const s=nm(p0.r.existencia_petroleo_litros)+(nm(p0.r.litros_despachados_petroleo)||0)-(nm(p0.r.reposicion_litros)||0);
+    if(s>0) ings.push({fecha:p0.fecha,id_estanque:p0.est,tipo:'Saldo inicial',litros:s,precio_litro:null,proveedor:null,documento:null,observacion:'Calculado desde la columna EXISTENCIA de la planilla',ref_externa:'BDP:saldo-inicial:'+p0.est})}
+  for(const x of filas){
+    const rep=nm(x.r.reposicion_litros);
+    if(!(rep>0)) continue;
+    if(!x.fecha){issues.push(`${x.f}: reposición sin fecha válida.`);continue}
+    if(!x.est){issues.push(`${x.f}: estanque “${x.r.estanque_de_despacho??''}” no está en la lista de estanques.`);continue}
+    const pr=nm(x.r.precio_petroleo);
+    ings.push({fecha:x.fecha,id_estanque:x.est,tipo:'Compra',litros:rep,precio_litro:pr>0?Math.round(pr*100)/100:null,proveedor:null,documento:null,observacion:null,ref_externa:ref(['ING',x.fecha,x.est,rep])});
+  }
+  const compras=ings.filter(i=>i.tipo==='Compra'&&i.precio_litro!=null).sort((a,b)=>a.fecha.localeCompare(b.fecha));
+  const precioAl=f=>{let p=null;for(const c of compras){if(c.fecha<=f)p=c.precio_litro;else break}return p??compras[0]?.precio_litro??null};
+  for(const x of filas){
+    const lit=nm(x.r.litros_despachados_petroleo);
+    if(!(lit>0)) continue;
+    if(!x.fecha){issues.push(`${x.f}: despacho sin fecha válida.`);continue}
+    if(!x.est){issues.push(`${x.f}: estanque “${x.r.estanque_de_despacho??''}” no está en la lista de estanques.`);continue}
+    const nom=N(x.r.maquinaria), d={id_maquina:null,id_destino:null,id_estanque_destino:null};
+    if(estBy.has(nom)) d.id_estanque_destino=estBy.get(nom);
+    else if(ALIAS_EQUIPO[nom]) d.id_maquina=ALIAS_EQUIPO[nom];
+    else if(eqBy.get(nom)) d.id_maquina=eqBy.get(nom);
+    else if(desBy.has(nom)) d.id_destino=desBy.get(nom);
+    else if(!nom&&desBy.has('SIN IDENTIFICAR')) d.id_destino=desBy.get('SIN IDENTIFICAR');
+    else {issues.push(`${x.f}: “${x.r.maquinaria??''}” no es un equipo, otro destino ni estanque de las listas.`);continue}
+    if(d.id_estanque_destino===x.est){issues.push(`${x.f}: traspaso al mismo estanque.`);continue}
+    const ch=N(x.r.chofer), op=opBy.get(ch)||null;
+    if(ch&&!op&&ch!=='OPERADOR') issues.push(`${x.f}: chofer “${x.r.chofer}” no está en la lista; se importa sin chofer.`);
+    const lab=x.r.labor?labBy.get(N(x.r.labor))||null:null;
+    if(x.r.labor&&!lab) issues.push(`${x.f}: labor “${x.r.labor}” no está en la lista; se importa sin labor.`);
+    const h=nm(x.r.horometro);
+    cargas.push({fecha:x.fecha,...d,id_estanque:x.est,origen:'Estanque fundo',id_operador:op,litros:lit,
+      horometro:d.id_maquina&&h>0?h:null,estanque_lleno:!!d.id_maquina,precio_litro:precioAl(x.fecha),labor:lab,centro:null,
+      empresa_costo:x.r.propietario&&!d.id_estanque_destino?String(x.r.propietario).trim().toUpperCase():null,observacion:x.r.observacion==null?null:String(x.r.observacion),
+      ref_externa:ref(['CAR',x.fecha,nom,lit,x.r.horometro??'',ch,x.est])});
+  }
+  /* IDs: se conservan los de filas ya importadas (misma clave); las nuevas siguen la numeración */
+  const cByRef=new Map(S.comb.filter(c=>c.ref_externa).map(c=>[c.ref_externa,c.id_carga])), genC=nextIdGen('CAR',S.comb.map(c=>c.id_carga));
+  for(const c of cargas) c.id_carga=cByRef.get(c.ref_externa)||genC();
+  const iByRef=new Map(S.ing.filter(i=>i.ref_externa).map(i=>[i.ref_externa,i.id_ingreso])), genI=nextIdGen('ING',S.ing.map(i=>i.id_ingreso));
+  for(const i of ings) i.id_ingreso=iByRef.get(i.ref_externa)||genI();
+  S.importKind='combustible';S.importIssues=issues;
+  if(!cargas.length&&!ings.length){render();toast('No encontré despachos ni reposiciones válidas en la hoja “Base Datos”.');return}
+  toast(`Importando ${fmt0(cargas.length)} despachos y ${fmt0(ings.length)} ingresos…`);
+  try{await upsert('combustible_ingresos',ings,'id_ingreso');await upsert('combustible',cargas,'id_carga')}
+  catch(e){toast(errMsg(e));await loadMod('combustible');return}
+  toast(`${fmt0(cargas.length)} despachos y ${fmt0(ings.length)} ingresos importados${issues.length?` · ${issues.length} avisos`:''}`);
+  await afterWrite(['combustible','mantenciones','base']);
 }
 /* Importación de la plantilla de maquinaria (equipos, documentos, operadores). */
 async function importXls(file){
@@ -1496,6 +2031,14 @@ document.addEventListener('click',ev=>{
   else if(a==='reload-mod'){S.mods[t.dataset.kind].err='';loadMod(t.dataset.kind)}
   else if(a==='issues-close'){S.importIssues=[];render()}
   else if(a==='logout'){logout()}
+  else if(a==='fact-pdf'){ev.preventDefault();ev.stopPropagation();verPdf(t.dataset.path)}
+  else if(a==='est-sel'){S.cb.est=t.dataset.val;render()}
+  else if(a==='lista'){S.cb.lista=t.dataset.val;S.lEdit=null;S.lConf=false;S.lErr='';render()}
+  else if(a==='lista-edit'){S.lEdit=t.dataset.val;S.lConf=false;S.lErr='';render();const el=$('#l-nombre');if(el)el.focus()}
+  else if(a==='lista-cancel'){S.lEdit=null;S.lConf=false;S.lErr='';render()}
+  else if(a==='lista-activo'){accionLista('activo')}
+  else if(a==='lista-del'){S.lConf=true;render()}
+  else if(a==='lista-del-si'){accionLista('borrar')}
   else if(a==='lc-preset'){
     const ms=[...new Set(S.leche.map(r=>r.fecha.slice(0,7)))].sort(),v=t.dataset.val;
     if(v==='all'){S.lc.from=ms[0];S.lc.to=ms[ms.length-1]}
@@ -1515,6 +2058,15 @@ document.addEventListener('change',ev=>{
   if(el.dataset.set){const [o,k]=el.dataset.set.split('.');S[o][k]=el.value;if(o==='lc'&&k==='from'&&S.lc.to<el.value)S.lc.to=el.value;if(o==='lc'&&k==='to'&&S.lc.from>el.value)S.lc.from=el.value;render();return}
   /* al cambiar el equipo o la fecha de un registro, se actualiza la última lectura de horómetro */
   if(S.rec&&(el.id==='r-eq'||el.id==='r-fecha')&&(S.rec.kind==='comb'||S.rec.kind==='mant')){S.rec.data={...S.rec.data,...REC[S.rec.kind].read()};S.warn='';S.warnAck=false;renderDrawer()}
+  /* carga: al cambiar destino u origen cambia el formulario; ingreso y medición recalculan totales y diferencias */
+  if(S.rec&&((S.rec.kind==='comb'&&['r-dtipo','r-orig'].includes(el.id))||(S.rec.kind==='ing'&&['r-litros','r-precio'].includes(el.id))||(S.rec.kind==='med'&&['r-est','r-fecha','r-med'].includes(el.id)))){
+    S.rec.data={...S.rec.data,...REC[S.rec.kind].read()};S.warn='';S.warnAck=false;renderDrawer();
+  }
+  /* facturas: al elegir el PDF se lee; al cambiar equipo, vínculo o montos se actualiza el formulario */
+  if(S.rec&&S.rec.kind==='fact'){
+    if(el.id==='r-pdf'){const f=el.files[0];if(f){S.rec.data={...S.rec.data,...REC.fact.read()};cargarPdf(f)}return}
+    if(['r-eq','r-vinc','r-mtipo','r-neto','r-exento','r-iva','r-total'].includes(el.id)){S.rec.data={...S.rec.data,...REC.fact.read()};S.warn='';S.warnAck=false;renderDrawer()}
+  }
 });
 document.addEventListener('input',ev=>{
   if(ev.target.id==='f-q'){S.q=ev.target.value;const pos=ev.target.selectionStart;renderEquipos([...S.eq.values()],false);const el=$('#f-q');el.focus();el.setSelectionRange(pos,pos)}
@@ -1525,6 +2077,7 @@ document.addEventListener('submit',async ev=>{
   if(ev.target.id==='loginform'){login();return}
   if(ev.target.id==='eqform'){saveEquipo();return}
   if(ev.target.id==='recform'){saveRec();return}
+  if(ev.target.id==='listaform'){guardarLista();return}
   if(ev.target.id!=='opform'||S.saving)return;
   const id=(val('op-id')||'').toUpperCase(),nombre=val('op-nombre');
   if(!RE_OP.test(id)){S.formErr='Escribe un ID con el formato OP-01.';render();return}
