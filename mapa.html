@@ -1,0 +1,694 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Mapa · Torre de Control Agrícola</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.css">
+<style>
+:root{
+  --bg:#F2F5F1; --surface:#FFFFFF; --sunk:#E9EFE8; --fg:#18281D; --muted:#5A6B5F; --line:#DCE4DA; --line-strong:#C3D0C2;
+  --brand:#16351F; --brand-fg:#E6F0E8; --brand-muted:#93B59D;
+  --accent:#2E7346; --accent-fg:#FFFFFF; --accent-soft:#E1EEE3;
+  --warn:#8F5A0E; --warn-bg:#FAEFD7; --bad:#A3372A; --bad-bg:#F8E3DF;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0E1611; --surface:#15201A; --sunk:#1B2820; --fg:#E2EBE4; --muted:#98AC9D; --line:#29392E; --line-strong:#38503F;
+  --brand:#0A160E; --brand-fg:#D8E8DC; --brand-muted:#7FA28A;
+  --accent:#62B47F; --accent-fg:#0A160E; --accent-soft:#1D3A26;
+  --warn:#E5B567; --warn-bg:#3A2D14; --bad:#EF8F80; --bad-bg:#3E1F1A;
+}}
+:root[data-theme="dark"]{
+  --bg:#0E1611; --surface:#15201A; --sunk:#1B2820; --fg:#E2EBE4; --muted:#98AC9D; --line:#29392E; --line-strong:#38503F;
+  --brand:#0A160E; --brand-fg:#D8E8DC; --brand-muted:#7FA28A;
+  --accent:#62B47F; --accent-fg:#0A160E; --accent-soft:#1D3A26;
+  --warn:#E5B567; --warn-bg:#3A2D14; --bad:#EF8F80; --bad-bg:#3E1F1A;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{background:var(--bg);color:var(--fg);font:14px/1.5 var(--sans);margin:0}
+button,input,select,textarea{font:inherit;color:inherit}
+[hidden]{display:none!important}
+
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:7px 13px;cursor:pointer;font-size:13.5px;font-weight:500}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+.btn.danger{color:var(--bad);border-color:var(--bad-bg)}
+.btn.ghost{background:transparent;border-color:transparent}
+.btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.btn[disabled]{opacity:.5;cursor:default}
+.field{width:100%;border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:7px 10px;min-width:0}
+.field:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+label.f{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);min-width:0;margin-bottom:10px}
+label.f .field{color:var(--fg);font-size:13.5px}
+.banner{padding:9px 12px;border-radius:9px;margin:0 0 12px;font-size:13px;background:var(--warn-bg);color:var(--warn)}
+.banner.err{background:var(--bad-bg);color:var(--bad)}
+.banner ul{margin:4px 0 0;padding-left:18px}
+
+.login{min-height:100%;display:grid;place-items:center;background:var(--brand);padding:24px 16px}
+.login form{background:var(--surface);border-radius:14px;padding:24px;width:min(340px,100%)}
+.login h1{font-size:18px;margin:0 0 2px}
+.login p{margin:0 0 16px;color:var(--muted);font-size:13px}
+
+.app{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr)}
+.top{background:var(--brand);color:var(--brand-fg);display:flex;align-items:center;gap:12px;padding:8px 14px;min-width:0}
+.top a{color:var(--brand-muted);text-decoration:none;font-size:13px;white-space:nowrap}
+.top a:hover{color:var(--brand-fg)}
+.top b{font-weight:600;white-space:nowrap}
+.buscar{position:relative;flex:1;max-width:420px;min-width:0}
+.buscar .field{background:var(--surface);color:var(--fg);padding:6px 10px}
+.resultados{position:absolute;top:100%;left:0;right:0;margin-top:4px;background:var(--surface);color:var(--fg);border:1px solid var(--line);border-radius:9px;z-index:20;overflow:hidden;box-shadow:0 6px 20px rgba(0,0,0,.2)}
+.resultados button{display:block;width:100%;text-align:left;background:none;border:0;padding:8px 12px;cursor:pointer;font-size:13px}
+.resultados button:hover{background:var(--sunk)}
+.resultados div{padding:8px 12px;font-size:13px;color:var(--muted)}
+.seg{display:inline-flex;border:1px solid rgba(255,255,255,.2);border-radius:8px;overflow:hidden;flex:none}
+.seg button{background:transparent;color:var(--brand-fg);border:0;padding:5px 11px;cursor:pointer;font-size:12.5px}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-fg)}
+.seg button[disabled]{opacity:.5;cursor:default}
+.linkbtn{background:none;border:0;color:var(--brand-muted);cursor:pointer;font-size:12.5px;white-space:nowrap;margin-left:auto;padding:0}
+.linkbtn:hover{color:var(--brand-fg)}
+
+.cuerpo{display:grid;grid-template-columns:340px minmax(0,1fr);min-height:0}
+.panel{background:var(--bg);border-right:1px solid var(--line);overflow-y:auto;padding:14px;min-height:0}
+.panel h2{font-size:16px;margin:0;font-weight:600;overflow-wrap:anywhere}
+.panel h3{font-size:12px;margin:16px 0 6px;color:var(--muted);font-weight:500;letter-spacing:.02em}
+.sub{color:var(--muted);font-size:12.5px;margin-bottom:12px}
+.acciones{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.acciones .btn{flex:1 1 auto}
+.mapwrap{position:relative;min-height:0}
+#map{position:absolute;inset:0}
+.pista{position:absolute;top:10px;left:50%;transform:translateX(-50%);max-width:calc(100% - 24px);background:var(--surface);color:var(--fg);border-radius:9px;padding:7px 13px;font-size:13px;box-shadow:0 3px 12px rgba(0,0,0,.3);z-index:5}
+.pista b{font-family:var(--mono);font-weight:500}
+
+.fila{display:flex;align-items:center;gap:8px;width:100%;background:none;border:0;border-radius:7px;padding:5px 8px;cursor:pointer;text-align:left;min-width:0}
+.fila:hover{background:var(--sunk)}
+.fila:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.fila .n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fila .ha{font-family:var(--mono);font-size:12px;color:var(--muted);white-space:nowrap}
+.fila.predio{font-weight:600}
+.fila.nivel1{padding-left:20px}
+.fila.nivel2{padding-left:38px}
+.punto{width:10px;height:10px;border-radius:3px;flex:none;border:1px solid rgba(0,0,0,.25)}
+.leyenda{display:flex;flex-wrap:wrap;gap:6px 12px;font-size:12px;color:var(--muted);margin-top:4px}
+.leyenda span{display:inline-flex;align-items:center;gap:5px}
+.datos{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 12px;font-size:13px;margin:0 0 12px}
+.datos dt{color:var(--muted)}
+.datos dd{margin:0;overflow-wrap:anywhere}
+.datos .num{font-family:var(--mono)}
+.tabla{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:12px}
+.tabla td{padding:4px 6px;border-top:1px solid var(--line)}
+.tabla td.num{font-family:var(--mono);text-align:right;white-space:nowrap}
+.vacio{color:var(--muted);font-size:13px;padding:8px}
+
+.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--brand);color:var(--brand-fg);padding:8px 16px;border-radius:9px;font-size:13px;z-index:50;max-width:calc(100% - 32px)}
+.maplibregl-ctrl-attrib{font-size:11px}
+
+@media (max-width:760px){
+  .top{flex-wrap:wrap;gap:8px}
+  .buscar{order:5;flex-basis:100%;max-width:none}
+  .cuerpo{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,55%) minmax(0,45%)}
+  .panel{order:2;border-right:0;border-top:1px solid var(--line)}
+}
+</style>
+</head>
+<body>
+<div class="login" id="login" hidden>
+  <form id="l-form">
+    <h1>Mapa de predios</h1>
+    <p>Torre de Control Agrícola</p>
+    <label class="f">Correo<input class="field" id="l-email" type="email" autocomplete="username"></label>
+    <label class="f">Contraseña<input class="field" id="l-pass" type="password" autocomplete="current-password"></label>
+    <div class="banner err" id="l-err" hidden></div>
+    <button class="btn primary" id="l-btn" style="width:100%">Entrar</button>
+  </form>
+</div>
+
+<div class="app" id="app" hidden>
+  <header class="top">
+    <a href="./">← Torre de Control</a>
+    <b>Mapa</b>
+    <div class="buscar">
+      <input class="field" id="q" type="search" placeholder="Buscar predio, potrero, lugar o -41.12, -73.03" aria-label="Buscar" autocomplete="off">
+      <div class="resultados" id="res" hidden></div>
+    </div>
+    <div class="seg" role="group" aria-label="Fondo del mapa">
+      <button data-base="sat">Satélite</button><button data-base="osm">Mapa</button>
+    </div>
+    <button class="linkbtn" data-act="logout">Cerrar sesión</button>
+  </header>
+  <div class="cuerpo">
+    <aside class="panel" id="panel"></aside>
+    <div class="mapwrap">
+      <div id="map"></div>
+      <div class="pista" id="pista" hidden></div>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast" hidden></div>
+<input type="file" id="archivo" accept=".kml,.kmz,.geojson,.json" hidden>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/terra-draw@1.39.0/dist/terra-draw.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/terra-draw-maplibre-gl-adapter@1.5.0/dist/terra-draw-maplibre-gl-adapter.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tmcw/togeojson@7.1.3/dist/togeojson.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.2/dist/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@turf/turf@7.4.0/turf.min.js"></script>
+<script>
+/* Conexión: misma base y misma sesión que index.html. */
+const SUPABASE_URL='https://ryelugkgjcxxxebinctw.supabase.co';
+const SUPABASE_KEY='sb_publishable_578gWB25lHAmmaOl9kcNpA_ICXwofww';
+/* Clave de ArcGIS Location Platform, restringida al dominio de la página. Vacía = sin satélite ni búsqueda de lugares. */
+const ESRI_KEY='Slash-888';
+const sb=window.supabase?window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY):null;
+
+const VISTA_INICIAL={center:[-73,-40.8],zoom:7};   // sur de Chile, hasta que haya predios
+const TIPOS=['Subdivisión','Potrero'];
+const MAX_ARCHIVO=20*1024*1024;
+
+const S={user:null,base:ESRI_KEY?'sat':'osm',mapaListo:false,
+  predios:[],terrenos:[],usos:[],centros:[],roles:new Map(),err:'',q:'',
+  sel:null,avisos:null,borrar:false,form:null,imp:null,ocupado:false};
+let map=null,draw=null;
+
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmtHa=n=>n==null?'—':Number(n).toLocaleString('es-CL',{minimumFractionDigits:2,maximumFractionDigits:2})+' ha';
+const opts=(l,v)=>l.map(o=>{const [val,txt]=Array.isArray(o)?o:[o,o];return `<option value="${esc(val)}" ${val===v?'selected':''}>${esc(txt)}</option>`}).join('');
+const areaHa=g=>turf.area({type:'Feature',properties:{},geometry:g})/10000;
+const puedeEditar=c=>['editor','admin'].includes(S.roles.get(c));
+const centrosEditables=()=>S.centros.filter(puedeEditar);
+function toast(t){const e=$('#toast');e.textContent=t;e.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>e.hidden=true,3500)}
+function msgError(e){
+  const m=e&&e.message||'error desconocido';
+  if(e&&e.code==='42501') return 'No tienes permiso para esta acción en ese centro.';
+  if(e&&e.code==='23503') return 'No se puede eliminar: todavía tiene terrenos dentro. Elimínalos primero.';
+  if(e&&e.code==='23505') return 'Ya existe un registro con esa clave.';
+  if(m.toLowerCase().includes('fetch')) return 'No hay conexión con el servidor. Revisa internet e inténtalo de nuevo.';
+  return m;
+}
+
+/* ---------- sesión ---------- */
+async function login(){
+  const email=$('#l-email').value.trim(),password=$('#l-pass').value,err=$('#l-err');
+  if(!email||!password){err.textContent='Escribe tu correo y tu contraseña.';err.hidden=false;return}
+  $('#l-btn').disabled=true;err.hidden=true;
+  const {error}=await sb.auth.signInWithPassword({email,password});
+  $('#l-btn').disabled=false;
+  if(error){err.textContent=error.message.toLowerCase().includes('invalid')?'Correo o contraseña incorrectos.':msgError(error);err.hidden=false}
+  else $('#l-pass').value='';
+}
+function mostrarAcceso(){
+  $('#login').hidden=!!S.user;$('#app').hidden=!S.user;
+  if(S.user){iniciarMapa();cargar()}
+}
+
+/* ---------- datos ---------- */
+async function cargar(){
+  const [p,t,u,c,r]=await Promise.all([
+    sb.from('v_predios_geo').select('*').order('nombre'),
+    sb.from('v_terrenos_geo').select('*').eq('activo',true).order('nombre'),
+    sb.from('usos_terreno').select('*').order('orden'),
+    sb.from('centros').select('centro').order('orden'),
+    sb.from('usuarios_centros').select('centro,rol').eq('user_id',S.user.id)
+  ]);
+  const e=p.error||t.error||u.error||c.error||r.error;
+  if(e){
+    S.err=e.code==='42P01'||e.code==='PGRST205'?'El módulo aún no está instalado en la base de datos: falta aplicar la migración GIS.':msgError(e);
+    render();return
+  }
+  S.err='';S.predios=p.data;S.terrenos=t.data;S.usos=u.data;S.centros=c.data.map(x=>x.centro);
+  S.roles=new Map(r.data.map(x=>[x.centro,x.rol]));
+  pintar();render();
+  if(!cargar.encuadrado&&S.predios.length){cargar.encuadrado=true;encuadrar(colPredios())}
+}
+const buscarPredio=id=>S.predios.find(p=>p.id_predio===id);
+const buscarTerreno=id=>S.terrenos.find(t=>t.id_terreno===id);
+const coleccion=l=>({type:'FeatureCollection',features:l});
+const colPredios=()=>coleccion(S.predios.map(p=>({type:'Feature',geometry:p.geojson,properties:{k:'predio',id:p.id_predio,etiqueta:`${p.nombre}\n${fmtHa(p.superficie_ha)}`}})));
+const colTerrenos=()=>coleccion(S.terrenos.map(t=>({type:'Feature',geometry:t.geojson,properties:{k:'terreno',id:t.id_terreno,tipo:t.tipo,color:t.color,etiqueta:`${t.nombre}\n${fmtHa(t.superficie_ha)}`}})));
+
+/* ---------- mapa ---------- */
+function iniciarMapa(){
+  if(map) return;
+  /* OpenFreeMap: gratis, sin clave. El satélite es una capa encima que se prende o apaga. */
+  map=new maplibregl.Map({container:'map',...VISTA_INICIAL,attributionControl:{compact:true},
+    style:'https://tiles.openfreemap.org/styles/liberty'});
+  map.addControl(new maplibregl.NavigationControl({showCompass:false}));
+  map.addControl(new maplibregl.ScaleControl({unit:'metric'}));
+  map.on('load',()=>{
+    if(ESRI_KEY){
+      map.addSource('sat',{type:'raster',tiles:[`https://ibasemaps-api.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}?token=${ESRI_KEY}`],tileSize:256,maxzoom:18,attribution:'Powered by Esri · Esri, Vantor, Earthstar Geographics y GIS User Community'});
+      map.addLayer({id:'sat',type:'raster',source:'sat',layout:{visibility:S.base==='sat'?'visible':'none'}});
+    }
+    const vacio=coleccion([]);
+    map.addSource('predios',{type:'geojson',data:vacio});
+    map.addSource('terrenos',{type:'geojson',data:vacio});
+    map.addSource('sel',{type:'geojson',data:vacio});
+    map.addSource('importar',{type:'geojson',data:vacio});
+    map.addLayer({id:'pre-fill',type:'fill',source:'predios',paint:{'fill-color':'#fff','fill-opacity':.04}});
+    map.addLayer({id:'ter-fill',type:'fill',source:'terrenos',paint:{'fill-color':['get','color'],'fill-opacity':['case',['==',['get','tipo'],'Potrero'],.42,.22]}});
+    map.addLayer({id:'ter-line',type:'line',source:'terrenos',paint:{'line-color':['get','color'],'line-width':1.6}});
+    map.addLayer({id:'pre-casing',type:'line',source:'predios',paint:{'line-color':'#10201A','line-width':4,'line-opacity':.55}});
+    map.addLayer({id:'pre-line',type:'line',source:'predios',paint:{'line-color':'#FFFFFF','line-width':2}});
+    map.addLayer({id:'imp-fill',type:'fill',source:'importar',paint:{'fill-color':'#FF8A1F','fill-opacity':.3}});
+    map.addLayer({id:'imp-line',type:'line',source:'importar',paint:{'line-color':'#FF8A1F','line-width':2}});
+    map.addLayer({id:'sel-line',type:'line',source:'sel',paint:{'line-color':'#FFE14D','line-width':3.5}});
+    const texto={'text-font':['Noto Sans Regular'],'text-field':['get','etiqueta'],'text-size':12,'text-max-width':14};
+    const halo={'text-color':'#FFFFFF','text-halo-color':'#10201A','text-halo-width':1.4};
+    map.addLayer({id:'ter-label',type:'symbol',source:'terrenos',minzoom:12,layout:texto,paint:halo});
+    map.addLayer({id:'pre-label',type:'symbol',source:'predios',minzoom:9,maxzoom:13,layout:texto,paint:halo});
+
+    draw=new terraDraw.TerraDraw({
+      adapter:new terraDrawMaplibreGlAdapter.TerraDrawMapLibreGLAdapter({map}),
+      modes:[
+        new terraDraw.TerraDrawPolygonMode({styles:{fillingPolygonColor:'#FFE14D',fillingPolygonFillOpacity:.25,outlineColor:'#FFE14D',outlineWidth:2.5,closingPointColor:'#FFE14D',closingPointWidth:6,closingPointOutlineColor:'#10201A',closingPointOutlineWidth:1,snappingPointColor:'#FFE14D'}}),
+        new terraDraw.TerraDrawSelectMode({flags:{polygon:{feature:{draggable:true,coordinates:{midpoints:true,draggable:true,deletable:true}}}},
+          styles:{selectedPolygonColor:'#FFE14D',selectedPolygonFillOpacity:.25,selectedPolygonOutlineColor:'#FFE14D',selectedPolygonOutlineWidth:2.5,selectionPointColor:'#FFE14D',selectionPointWidth:6,selectionPointOutlineColor:'#10201A',selectionPointOutlineWidth:1,midPointColor:'#FFFFFF',midPointWidth:4,midPointOutlineColor:'#10201A',midPointOutlineWidth:1}})
+      ]
+    });
+    draw.start();
+    draw.on('change',()=>actualizarSuperficie());
+    draw.on('finish',(id,c)=>{
+      if(!S.form||c.mode!=='polygon') return;
+      draw.setMode('select');draw.selectFeature(id);
+      recordarForm();S.form.conForma=true;render();actualizarPista();
+    });
+    S.mapaListo=true;pintar();
+  });
+  map.on('click',e=>{
+    if(S.form||S.imp) return;
+    const f=map.queryRenderedFeatures(e.point,{layers:['ter-fill','pre-fill']});
+    const peso=x=>x.properties.k==='predio'?2:x.properties.tipo==='Potrero'?0:1;
+    const g=f.sort((a,b)=>peso(a)-peso(b))[0];
+    if(g) seleccionar(g.properties.k,g.properties.id);
+    else{S.sel=null;S.avisos=null;S.borrar=false;pintar();render()}
+  });
+  for(const l of ['ter-fill','pre-fill']){
+    map.on('mouseenter',l,()=>{if(!S.form)map.getCanvas().style.cursor='pointer'});
+    map.on('mouseleave',l,()=>{if(!S.form)map.getCanvas().style.cursor=''});
+  }
+  marcarBase();
+}
+function pintar(){
+  if(!S.mapaListo) return;
+  const oculto=S.form&&S.form.editaForma?S.form.id:null;   // lo que se edita lo dibuja Terra Draw
+  const quitar=fc=>oculto?coleccion(fc.features.filter(f=>f.properties.id!==oculto)):fc;
+  map.getSource('predios').setData(quitar(colPredios()));
+  map.getSource('terrenos').setData(quitar(colTerrenos()));
+  const g=!S.form&&S.sel?geomSel():null;
+  map.getSource('sel').setData(coleccion(g?[{type:'Feature',properties:{},geometry:g}]:[]));
+  map.getSource('importar').setData(coleccion(S.imp?S.imp.filas.filter(f=>f.on).map(f=>({type:'Feature',properties:{},geometry:f.geom})):[]));
+}
+function encuadrar(fc){
+  if(!fc.features.length) return;
+  const [a,b,c,d]=turf.bbox(fc);
+  map.fitBounds([[a,b],[c,d]],{padding:50,maxZoom:16,duration:600});
+}
+const geomSel=()=>{if(!S.sel)return null;const r=S.sel.k==='predio'?buscarPredio(S.sel.id):buscarTerreno(S.sel.id);return r&&r.geojson};
+function cambiarBase(b){
+  if(b==='sat'&&!ESRI_KEY) return;
+  S.base=b;
+  if(ESRI_KEY) map.setLayoutProperty('sat','visibility',b==='sat'?'visible':'none');
+  marcarBase();
+}
+function marcarBase(){
+  for(const b of document.querySelectorAll('[data-base]')){
+    b.setAttribute('aria-pressed',String(b.dataset.base===S.base));
+    if(b.dataset.base==='sat'&&!ESRI_KEY){b.disabled=true;b.title='Falta la clave de ArcGIS'}
+  }
+}
+
+/* ---------- selección ---------- */
+async function seleccionar(k,id,mover){
+  S.sel={k,id};S.avisos=null;S.borrar=false;S.q='';
+  pintar();render();
+  if(mover) encuadrar(coleccion([{type:'Feature',properties:{},geometry:geomSel()}]));
+  if(k==='terreno'){
+    const {data}=await sb.rpc('avisos_terreno',{p_id:id});
+    if(S.sel&&S.sel.id===id){S.avisos=data;render()}
+  }
+}
+
+/* ---------- dibujo y edición ---------- */
+const poligonoEditable=g=>g.type==='MultiPolygon'?g.coordinates.length===1&&g.coordinates[0].length===1:g.coordinates.length===1;
+function geomDibujada(){
+  const f=draw.getSnapshot().find(x=>x.geometry.type==='Polygon'&&!x.properties.currentlyDrawing);
+  return f?f.geometry:null;
+}
+function actualizarSuperficie(){
+  if(!S.form) return;
+  const f=draw.getSnapshot().find(x=>x.geometry.type==='Polygon');
+  const r=f&&f.geometry.coordinates[0].length>=4?fmtHa(areaHa(f.geometry)):'—';
+  for(const e of document.querySelectorAll('#ha-viva,#ha-panel')) e.textContent=r;
+}
+function actualizarPista(){
+  const p=$('#pista'),f=S.form;
+  if(!f||!(f.dibuja||f.editaForma)){p.hidden=true;return}
+  p.hidden=false;
+  p.innerHTML=(f.dibuja&&!f.conForma
+    ?'Haz clic para marcar cada vértice. Clic en el primero para cerrar.'
+    :'Arrastra los vértices para ajustar. Clic en un punto blanco agrega uno; clic derecho quita uno.')+` Superficie: <b id="ha-viva">—</b>`;
+  actualizarSuperficie();
+}
+function abrirForm(f){
+  S.form={conForma:false,dibuja:false,editaForma:false,...f};S.borrar=false;
+  if(S.form.dibuja){draw.clear();draw.setMode('polygon');map.getCanvas().style.cursor='crosshair'}
+  pintar();render();actualizarPista();
+}
+function nuevoPredio(){
+  const c=centrosEditables();
+  abrirForm({k:'predio',id:null,dibuja:true,nombre:'',centro:c[0]});
+}
+function nuevoTerreno(idPredio,padre){
+  const p=buscarPredio(idPredio);
+  encuadrar(coleccion([{type:'Feature',properties:{},geometry:p.geojson}]));
+  abrirForm({k:'terreno',id:null,dibuja:true,id_predio:idPredio,id_padre:padre||'',tipo:padre?'Potrero':'Subdivisión',nombre:'',uso:'Sin uso'});
+}
+function editarDatos(){
+  const r=S.sel.k==='predio'?buscarPredio(S.sel.id):buscarTerreno(S.sel.id);
+  abrirForm({...r,k:S.sel.k,id:S.sel.id,id_padre:r.id_padre||''});
+}
+function editarForma(){
+  const r=S.sel.k==='predio'?buscarPredio(S.sel.id):buscarTerreno(S.sel.id);
+  const g=r.geojson.type==='MultiPolygon'?{type:'Polygon',coordinates:r.geojson.coordinates[0]}:r.geojson;
+  abrirForm({...r,k:S.sel.k,id:S.sel.id,id_padre:r.id_padre||'',editaForma:true,conForma:true});
+  draw.clear();draw.setMode('select');
+  const [res]=draw.addFeatures([{type:'Feature',geometry:g,properties:{mode:'polygon'}}]);
+  if(!res.valid){cerrarForm();toast('Esta forma no se puede editar: '+res.reason);return}
+  draw.selectFeature(res.id);actualizarSuperficie();
+  encuadrar(coleccion([{type:'Feature',properties:{},geometry:g}]));
+}
+function cerrarForm(){
+  S.form=null;
+  if(draw){draw.clear();draw.setMode('static')}
+  if(map)map.getCanvas().style.cursor='';
+  pintar();render();actualizarPista();
+}
+function leerForm(){
+  const v=id=>{const e=$('#'+id);return e?e.value.trim():''};
+  return v;
+}
+async function guardar(){
+  const f=S.form,v=leerForm();
+  const nombre=v('f-nombre');
+  if(!nombre){toast('Escribe un nombre.');return}
+  let g=null;
+  if(f.dibuja||f.editaForma){
+    g=geomDibujada();
+    if(!g){toast('Primero termina de dibujar la forma.');return}
+  }
+  S.ocupado=true;render();
+  let r;
+  if(f.k==='predio'){
+    const ha=v('f-legal').replace(',','.');
+    r=await sb.rpc('guardar_predio',{p_id:f.id,p_nombre:nombre,p_centro:v('f-centro'),p_geojson:g,
+      p_rol_sii:v('f-rol')||null,p_comuna:v('f-comuna')||null,p_propietario:v('f-prop')||null,
+      p_superficie_legal_ha:ha?Number(ha):null,p_observacion:v('f-obs')||null,p_ref_externa:f.ref_externa||null});
+  }else{
+    const tipo=v('f-tipo');
+    r=await sb.rpc('guardar_terreno',{p_id:f.id,p_id_predio:f.id_predio,p_nombre:nombre,p_tipo:tipo,p_uso:v('f-uso'),
+      p_geojson:g,p_id_padre:tipo==='Potrero'?(v('f-padre')||null):null,p_observacion:v('f-obs')||null,p_ref_externa:f.ref_externa||null});
+  }
+  S.ocupado=false;
+  if(r.error){render();toast(msgError(r.error));return}
+  const k=f.k;
+  cerrarForm();await cargar();
+  seleccionar(k,r.data);
+  toast('Guardado');
+}
+async function eliminar(){
+  const {k,id}=S.sel;
+  const q=k==='predio'?sb.from('predios').delete().eq('id_predio',id):sb.from('terrenos').delete().eq('id_terreno',id);
+  const {error}=await q;
+  if(error){S.borrar=false;render();toast(msgError(error));return}
+  S.sel=null;S.borrar=false;await cargar();toast('Eliminado');
+}
+
+/* ---------- importación KML, KMZ y GeoJSON ---------- */
+const limpiarCoord=c=>[+c[0].toFixed(7),+c[1].toFixed(7)];
+const limpiarAnillos=a=>a.map(r=>r.map(limpiarCoord));
+function extraerPoligonos(g,out){
+  if(!g) return;
+  if(g.type==='Polygon') out.push({type:'Polygon',coordinates:limpiarAnillos(g.coordinates)});
+  else if(g.type==='MultiPolygon') for(const p of g.coordinates) out.push({type:'Polygon',coordinates:limpiarAnillos(p)});
+  else if(g.type==='GeometryCollection') for(const x of g.geometries) extraerPoligonos(x,out);
+  else if(g.type==='LineString'&&g.coordinates.length>=4){   // perímetro trazado como línea en Google Earth
+    const a=g.coordinates[0],b=g.coordinates[g.coordinates.length-1];
+    if(a[0]===b[0]&&a[1]===b[1]) out.push({type:'Polygon',coordinates:[g.coordinates.map(limpiarCoord)]});
+  }
+}
+async function leerArchivo(file){
+  const ext=file.name.split('.').pop().toLowerCase();
+  if(ext==='kmz'){
+    const zip=await JSZip.loadAsync(file);
+    const k=Object.values(zip.files).find(f=>!f.dir&&f.name.toLowerCase().endsWith('.kml'));
+    if(!k) throw new Error('El KMZ no contiene un archivo KML.');
+    return kmlAGeojson(await k.async('string'));
+  }
+  const texto=await file.text();
+  if(ext==='kml') return kmlAGeojson(texto);
+  return JSON.parse(texto);
+}
+function kmlAGeojson(t){
+  const d=new DOMParser().parseFromString(t,'text/xml');
+  if(d.querySelector('parsererror')) throw new Error('El KML no se pudo leer.');
+  return toGeoJSON.kml(d);
+}
+async function importarArchivo(file){
+  if(file.size>MAX_ARCHIVO){toast('El archivo supera 20 MB.');return}
+  let gj;
+  try{gj=await leerArchivo(file)}
+  catch(e){toast('No se pudo leer el archivo: '+e.message);return}
+  const feats=gj.type==='FeatureCollection'?gj.features:gj.type==='Feature'?[gj]:[{type:'Feature',properties:{},geometry:gj}];
+  const filas=[],vistos=new Map();let ignorados=0;
+  for(const f of feats){
+    const out=[];extraerPoligonos(f.geometry,out);
+    if(!out.length){ignorados++;continue}
+    const base=(f.properties&&(f.properties.name||f.properties.nombre||f.properties.Name))||file.name.replace(/\.[^.]+$/,'');
+    for(const geom of out){
+      const n=(vistos.get(base)||0)+1;vistos.set(base,n);
+      const nombre=n>1?`${base} (${n})`:String(base);
+      filas.push({on:true,nombre,geom,ha:areaHa(geom),ref:`${file.name}#${nombre}`});
+    }
+  }
+  if(!filas.length){toast('El archivo no tiene polígonos.');return}
+  S.imp={archivo:file.name,filas,ignorados,destino:'predio',problemas:[]};
+  pintar();render();
+  encuadrar(coleccion(filas.map(f=>({type:'Feature',properties:{},geometry:f.geom}))));
+}
+async function ejecutarImportacion(){
+  const v=leerForm(),imp=S.imp,filas=imp.filas.filter(f=>f.on);
+  const destino=imp.destino,problemas=[];
+  if(!filas.length){toast('Marca al menos un polígono.');return}
+  S.ocupado=true;render();
+  let ok=0;
+  for(const f of filas){
+    const r=destino==='predio'
+      ?await sb.rpc('guardar_predio',{p_id:null,p_nombre:f.nombre,p_centro:v('i-centro'),p_geojson:f.geom,p_ref_externa:f.ref})
+      :await sb.rpc('guardar_terreno',{p_id:null,p_id_predio:v('i-predio'),p_nombre:f.nombre,p_tipo:v('i-tipo'),p_uso:v('i-uso'),p_geojson:f.geom,p_ref_externa:f.ref});
+    if(r.error) problemas.push(`${f.nombre}: ${msgError(r.error)}`);else ok++;
+  }
+  S.ocupado=false;
+  await cargar();
+  if(problemas.length){imp.problemas=problemas;render();toast(`Importados ${ok}; ${problemas.length} con problemas.`);return}
+  S.imp=null;pintar();render();toast(`Importados ${ok}.`);
+}
+
+/* ---------- búsqueda ---------- */
+function leerCoordenadas(t){
+  const m=t.match(/^\s*(-?\d{1,3}(?:[.,]\d+)?)\s*[,;\s]\s*(-?\d{1,3}(?:[.,]\d+)?)\s*$/);
+  if(!m) return null;
+  let lat=parseFloat(m[1].replace(',','.')),lon=parseFloat(m[2].replace(',','.'));
+  if(Math.abs(lat)>90) [lat,lon]=[lon,lat];
+  return Math.abs(lat)<=90&&Math.abs(lon)<=180?[lon,lat]:null;
+}
+function mostrarResultados(html){const r=$('#res');r.innerHTML=html;r.hidden=!html}
+async function buscarLugar(t){
+  const c=leerCoordenadas(t);
+  if(c){mostrarResultados('');map.flyTo({center:c,zoom:15});return}
+  if(!ESRI_KEY){mostrarResultados('<div>La búsqueda de lugares necesita la clave de ArcGIS. Predios y potreros se filtran en la lista.</div>');return}
+  mostrarResultados('<div>Buscando…</div>');
+  try{
+    const u=new URL('https://geocode-api.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates');
+    u.search=new URLSearchParams({f:'json',SingleLine:t,maxLocations:'5',sourceCountry:'CHL',token:ESRI_KEY});
+    const d=await (await fetch(u)).json();
+    if(d.error) throw new Error(d.error.message);
+    S.lugares=d.candidates||[];
+    mostrarResultados(S.lugares.length?S.lugares.map((c,i)=>`<button data-lugar="${i}">${esc(c.address)}</button>`).join(''):'<div>Sin resultados.</div>');
+  }catch(e){mostrarResultados('<div>No se pudo buscar el lugar.</div>')}
+}
+
+/* ---------- panel ---------- */
+function render(){
+  const p=$('#panel');
+  if(S.err) p.innerHTML=`<div class="banner err">${esc(S.err)}</div>`;
+  else if(S.form) p.innerHTML=htmlForm();
+  else if(S.imp) p.innerHTML=htmlImportar();
+  else if(S.sel&&geomSel()) p.innerHTML=htmlFicha();
+  else p.innerHTML=htmlLista();
+}
+function filaTerreno(t,nivel){
+  return `<button class="fila nivel${nivel}" data-ver="terreno" data-id="${esc(t.id_terreno)}"><span class="punto" style="background:${esc(t.color)}"></span><span class="n">${esc(t.nombre)}</span><span class="ha">${fmtHa(t.superficie_ha)}</span></button>`;
+}
+function htmlLista(){
+  const q=S.q.toLowerCase(),coincide=x=>!q||x.nombre.toLowerCase().includes(q);
+  let h='';
+  if(!S.roles.size) h+=`<div class="banner">Tu usuario todavía no tiene centros asignados. Pide que te agreguen en <b>usuarios_centros</b>.</div>`;
+  if(centrosEditables().length) h+=`<div class="acciones"><button class="btn primary" data-act="nuevo-predio">Nuevo predio</button><button class="btn" data-act="importar">Importar</button></div>`;
+  for(const c of S.centros){
+    const ps=S.predios.filter(p=>p.centro===c);
+    const filas=ps.map(p=>{
+      const ts=S.terrenos.filter(t=>t.id_predio===p.id_predio);
+      if(!coincide(p)&&!ts.some(coincide)) return '';
+      const subs=ts.filter(t=>t.tipo==='Subdivisión'),sueltos=ts.filter(t=>t.tipo==='Potrero'&&!t.id_padre);
+      return `<button class="fila predio" data-ver="predio" data-id="${esc(p.id_predio)}"><span class="n">${esc(p.nombre)}</span><span class="ha">${fmtHa(p.superficie_ha)}</span></button>`
+        +subs.map(s=>filaTerreno(s,1)+ts.filter(t=>t.id_padre===s.id_terreno).map(t=>filaTerreno(t,2)).join('')).join('')
+        +sueltos.map(t=>filaTerreno(t,1)).join('');
+    }).join('');
+    if(filas) h+=`<h3>${esc(c)}</h3>${filas}`;
+  }
+  if(!S.predios.length) h+=`<div class="vacio">Todavía no hay predios. Dibuja uno o importa un KML, KMZ o GeoJSON.</div>`;
+  else if(q&&!h.includes('class="fila')) h+=`<div class="vacio">Sin coincidencias. Presiona Enter para buscar el lugar en el mapa.</div>`;
+  h+=`<h3>Uso del terreno</h3><div class="leyenda">${S.usos.map(u=>`<span><i class="punto" style="background:${esc(u.color)}"></i>${esc(u.uso)}</span>`).join('')}</div>`;
+  return h;
+}
+function htmlFicha(){
+  const {k,id}=S.sel,r=k==='predio'?buscarPredio(id):buscarTerreno(id);
+  const centro=k==='predio'?r.centro:r.centro,edita=puedeEditar(centro),pred=k==='predio'?r:buscarPredio(r.id_predio);
+  const fila=(a,b,c='')=>b==null||b===''?'':`<dt>${a}</dt><dd class="${c}">${b}</dd>`;
+  let h=`<button class="btn ghost" data-act="volver" style="padding:2px 4px;margin:-2px 0 6px -4px">← Lista</button>
+    <h2>${esc(r.nombre)}</h2><div class="sub">${k==='predio'?'Predio':esc(r.tipo)} · ${esc(id)}</div>`;
+  if(S.avisos){
+    const a=[];
+    if(S.avisos.fuera_ha>=.05) a.push(`${fmtHa(S.avisos.fuera_ha)} quedan fuera de ${r.id_padre?'su subdivisión':'el predio'}.`);
+    for(const s of S.avisos.solapes||[]) a.push(`Se solapa ${fmtHa(s.ha)} con ${esc(s.nombre)}.`);
+    if(a.length) h+=`<div class="banner">${a.join('<br>')}</div>`;
+  }
+  h+='<dl class="datos">'+fila('Superficie',fmtHa(r.superficie_ha),'num');
+  if(k==='predio'){
+    const ts=S.terrenos.filter(t=>t.id_predio===id);
+    h+=fila('Legal',r.superficie_legal_ha!=null?fmtHa(r.superficie_legal_ha):'','num')+fila('Centro',esc(r.centro))
+      +fila('Rol SII',esc(r.rol_sii))+fila('Comuna',esc(r.comuna))+fila('Propietario',esc(r.propietario))
+      +fila('Terrenos',ts.length);
+  }else{
+    const padre=r.id_padre&&buscarTerreno(r.id_padre);
+    h+=fila('Uso',`<span class="punto" style="display:inline-block;background:${esc(r.color)};margin-right:5px"></span>${esc(r.uso)}`)
+      +fila('Predio',esc(pred.nombre))+fila('Subdivisión',padre?esc(padre.nombre):'')+fila('Centro',esc(r.centro));
+  }
+  h+=fila('Notas',esc(r.observacion))+'</dl>';
+  if(!edita) return h+`<div class="vacio">Solo lectura en este centro.</div>`;
+  const multi=!poligonoEditable(r.geojson);
+  h+=`<div class="acciones"><button class="btn" data-act="editar-datos">Editar datos</button><button class="btn" data-act="editar-forma" ${multi?'disabled title="Tiene varias partes o huecos: redibújala o reimporta el archivo"':''}>Editar forma</button></div>`;
+  if(k==='predio') h+=`<div class="acciones"><button class="btn" data-act="nueva-sub">Nueva subdivisión</button><button class="btn" data-act="nuevo-potrero">Nuevo potrero</button></div>`;
+  else if(r.tipo==='Subdivisión') h+=`<div class="acciones"><button class="btn" data-act="nuevo-potrero-en">Nuevo potrero aquí</button></div>`;
+  h+=S.borrar
+    ?`<div class="banner err">¿Eliminar ${esc(r.nombre)}? Quedará copia en el historial.<div class="acciones" style="margin:8px 0 0"><button class="btn danger" data-act="borrar-si">Sí, eliminar</button><button class="btn" data-act="borrar-no">No</button></div></div>`
+    :`<button class="btn danger" data-act="borrar">Eliminar</button>`;
+  return h;
+}
+function htmlForm(){
+  const f=S.form,des=S.ocupado?'disabled':'',con=f.dibuja||f.editaForma;
+  const campo=(id,t,v='')=>`<label class="f">${t}<input class="field" id="${id}" value="${esc(v)}"></label>`;
+  const titulo=f.id?`Editar ${f.editaForma?'forma':'datos'}`:f.k==='predio'?'Nuevo predio':`Nuevo terreno`;
+  let h=`<h2>${titulo}</h2><div class="sub">${f.k==='predio'?(f.nombre||'Predio'):esc(buscarPredio(f.id_predio).nombre)}</div>`;
+  if(con) h+=`<dl class="datos"><dt>Superficie</dt><dd class="num" id="ha-panel">—</dd></dl>`;
+  h+=campo('f-nombre','Nombre',f.nombre);
+  if(f.k==='predio'){
+    h+=`<label class="f">Centro<select class="field" id="f-centro">${opts(centrosEditables(),f.centro)}</select></label>`
+      +campo('f-rol','Rol SII',f.rol_sii)+campo('f-comuna','Comuna',f.comuna)+campo('f-prop','Propietario',f.propietario)
+      +campo('f-legal','Superficie legal (ha)',f.superficie_legal_ha);
+  }else{
+    const subs=S.terrenos.filter(t=>t.id_predio===f.id_predio&&t.tipo==='Subdivisión'&&t.id_terreno!==f.id);
+    h+=`<label class="f">Tipo<select class="field" id="f-tipo" data-cambia="tipo">${opts(TIPOS,f.tipo)}</select></label>`;
+    if(f.tipo==='Potrero') h+=`<label class="f">Subdivisión<select class="field" id="f-padre"><option value="">Ninguna</option>${opts(subs.map(s=>[s.id_terreno,s.nombre]),f.id_padre)}</select></label>`;
+    h+=`<label class="f">Uso<select class="field" id="f-uso">${opts(S.usos.map(u=>u.uso),f.uso)}</select></label>`;
+  }
+  h+=`<label class="f">Notas<textarea class="field" id="f-obs" rows="2">${esc(f.observacion)}</textarea></label>`;
+  h+=`<div class="acciones"><button class="btn primary" data-act="guardar" ${des}>${S.ocupado?'Guardando…':'Guardar'}</button><button class="btn" data-act="cancelar" ${des}>Cancelar</button></div>`;
+  return h;
+}
+function htmlImportar(){
+  const m=S.imp,des=S.ocupado?'disabled':'',predios=S.predios.filter(p=>puedeEditar(p.centro));
+  const n=m.filas.filter(f=>f.on).length;
+  let h=`<h2>Importar</h2><div class="sub">${esc(m.archivo)} · ${m.filas.length} polígonos</div>`;
+  if(m.ignorados) h+=`<div class="banner">${m.ignorados} elementos sin polígono (puntos o líneas abiertas) no se importarán.</div>`;
+  if(m.problemas.length) h+=`<div class="banner err"><b>Filas con problemas</b><ul>${m.problemas.slice(0,8).map(p=>`<li>${esc(p)}</li>`).join('')}</ul></div>`;
+  h+=`<label class="f">Importar como<select class="field" id="i-destino" data-cambia="destino">${opts([['predio','Predios'],['terreno','Terrenos de un predio']],m.destino)}</select></label>`;
+  if(m.destino==='predio') h+=`<label class="f">Centro<select class="field" id="i-centro">${opts(centrosEditables())}</select></label>`;
+  else if(predios.length) h+=`<label class="f">Predio<select class="field" id="i-predio">${opts(predios.map(p=>[p.id_predio,p.nombre]))}</select></label>
+    <label class="f">Tipo<select class="field" id="i-tipo">${opts(TIPOS,'Potrero')}</select></label>
+    <label class="f">Uso<select class="field" id="i-uso">${opts(S.usos.map(u=>u.uso),'Sin uso')}</select></label>`;
+  else h+=`<div class="banner">Primero crea un predio.</div>`;
+  h+=`<table class="tabla"><tbody>${m.filas.map((f,i)=>`<tr><td><input type="checkbox" data-fila="${i}" ${f.on?'checked':''} aria-label="Importar ${esc(f.nombre)}"></td><td>${esc(f.nombre)}</td><td class="num">${fmtHa(f.ha)}</td></tr>`).join('')}</tbody></table>`;
+  const bloqueado=m.destino==='terreno'&&!predios.length;
+  h+=`<div class="acciones"><button class="btn primary" data-act="imp-ok" ${des} ${bloqueado?'disabled':''}>${S.ocupado?'Importando…':`Importar ${n}`}</button><button class="btn" data-act="imp-no" ${des}>Cancelar</button></div>`;
+  return h;
+}
+
+/* ---------- eventos ---------- */
+const ACCIONES={
+  logout:()=>sb.auth.signOut(),
+  volver:()=>{S.sel=null;S.avisos=null;S.borrar=false;pintar();render()},
+  'nuevo-predio':nuevoPredio,
+  importar:()=>$('#archivo').click(),
+  'editar-datos':editarDatos,
+  'editar-forma':editarForma,
+  'nueva-sub':()=>nuevoTerreno(S.sel.id),
+  'nuevo-potrero':()=>{nuevoTerreno(S.sel.id);S.form.tipo='Potrero';render()},
+  'nuevo-potrero-en':()=>{const t=buscarTerreno(S.sel.id);nuevoTerreno(t.id_predio,t.id_terreno)},
+  guardar,
+  cancelar:cerrarForm,
+  borrar:()=>{S.borrar=true;render()},
+  'borrar-no':()=>{S.borrar=false;render()},
+  'borrar-si':eliminar,
+  'imp-ok':ejecutarImportacion,
+  'imp-no':()=>{S.imp=null;pintar();render()}
+};
+/* El formulario se vuelve a dibujar al cambiar de tipo: conserva lo ya escrito. */
+function recordarForm(){
+  const f=S.form,v=leerForm();if(!f) return;
+  f.nombre=v('f-nombre');f.observacion=v('f-obs');
+  if(f.k==='predio'){f.centro=v('f-centro');f.rol_sii=v('f-rol');f.comuna=v('f-comuna');f.propietario=v('f-prop');f.superficie_legal_ha=v('f-legal')}
+  else{f.tipo=v('f-tipo');f.uso=v('f-uso');f.id_padre=v('f-padre')}
+}
+document.addEventListener('click',e=>{
+  const t=e.target.closest('[data-act],[data-ver],[data-base],[data-lugar]');
+  if(!e.target.closest('.buscar')) mostrarResultados('');
+  if(!t||t.disabled) return;
+  if(t.dataset.act) ACCIONES[t.dataset.act]();
+  else if(t.dataset.ver) seleccionar(t.dataset.ver,t.dataset.id,true);
+  else if(t.dataset.base) cambiarBase(t.dataset.base);
+  else if(t.dataset.lugar){
+    const c=S.lugares[+t.dataset.lugar];mostrarResultados('');
+    map.flyTo({center:[c.location.x,c.location.y],zoom:14});
+  }
+});
+document.addEventListener('change',e=>{
+  const t=e.target;
+  if(t.dataset.cambia==='tipo'){recordarForm();render()}
+  else if(t.dataset.cambia==='destino'){S.imp.destino=t.value;render()}
+  else if(t.dataset.fila!==undefined){S.imp.filas[+t.dataset.fila].on=t.checked;pintar();render()}
+  else if(t.id==='archivo'&&t.files[0]){importarArchivo(t.files[0]);t.value=''}
+});
+$('#q').addEventListener('input',e=>{S.q=e.target.value.trim();mostrarResultados('');if(!S.form&&!S.imp&&!S.sel)render()});
+$('#q').addEventListener('keydown',e=>{if(e.key==='Enter'&&S.q){e.preventDefault();buscarLugar(S.q)}});
+$('#l-form').addEventListener('submit',e=>{e.preventDefault();login()});
+
+if(!sb){
+  document.body.innerHTML='<div class="vacio">No se pudo cargar la conexión con el servidor. Revisa internet y recarga la página.</div>';
+}else{
+  sb.auth.onAuthStateChange((event,session)=>{
+    const u=session?session.user:null,cambio=(u&&u.id)!==(S.user&&S.user.id);
+    S.user=u;
+    if(cambio||event==='INITIAL_SESSION') setTimeout(mostrarAcceso,0);
+  });
+}
+</script>
+</body>
+</html>
