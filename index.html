@@ -153,6 +153,9 @@ tfoot td{font-weight:500;background:var(--sunk)}
   padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);padding-right:env(safe-area-inset-right,0px)}
 .dhead{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:16px 20px;border-bottom:1px solid var(--line);background:var(--surface)}
 .dhead h2{margin:0;font-size:17px;font-weight:600}
+.eqthumb{width:52px;height:40px;object-fit:cover;border-radius:6px;background:var(--sunk);display:block}
+.eqfoto{display:flex;flex-direction:column;gap:8px}
+.eqfoto img{width:100%;max-height:300px;object-fit:contain;border-radius:10px;background:var(--sunk);display:block}
 .dbody{overflow-y:auto;padding:18px 20px;display:flex;flex-direction:column;gap:20px}
 .dfoot{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:14px 20px;border-top:1px solid var(--line);background:var(--surface)}
 fieldset{border:none;margin:0;padding:0;display:grid;grid-template-columns:1fr 1fr;gap:10px 12px}
@@ -235,6 +238,7 @@ textarea.field{min-height:72px;resize:vertical;font:inherit;font-size:13.5px}
 <div id="layer"></div>
 <div id="toast" class="toast" role="status" hidden></div>
 <input type="file" id="xls" accept=".xlsx,.xls" hidden>
+<input type="file" id="imgs" accept="image/jpeg,image/png,image/webp" multiple hidden>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -301,6 +305,7 @@ const S={mod:'maquinaria',tab:'equipos',q:'',tipo:'Todos',centro:'Todos',docf:'P
   comb:[],mant:[],fact:[],reb:[],control:[],leche:[],consumo:new Map(),costo:new Map(),
   mods:{combustible:{},mantenciones:{},rebano:{},leche:{},inventario:{}},
   ins:[],sil:[],movs:[],inv:{tab:'silos',cat:'Todas'},
+  imgs:new Map(),imgsAt:0,imgFor:null,imgConf:null,imgBusy:false,
   estq:[],dest:[],labs:[],ing:[],med:[],lEdit:null,lConf:false,lErr:'',stockEst:[],avisoNivel:false,nivelErr:{},
   cb:{tab:'cargas',per:'90',eq:'Todos',est:'',lista:'choferes'},mt:{tab:'intervenciones',per:'365',eq:'Todos',tipo:'Todos'},
   rb:{tab:'ultimo',centro:'Todos'},lc:{sala:'Todos',from:'',to:'',met:'litros'},
@@ -451,6 +456,7 @@ async function load(){
   if(!sil.error) S.sil=sil.data;
   if(!ins.error) S.ins=ins.data;
   render();
+  if(Date.now()-S.imgsAt>IMG_HORAS*36e5) cargarImagenes();
   /* aviso al entrar, una vez por sesión; después queda la marca en el menú y el aviso en el módulo */
   const bajos=[...estanquesBajos().map(v=>`${v.nombre} con ${fmt0(v.stock_calculado)} L`),...silosBajos().map(v=>`${v.nombre} con ${fmt0(v.stock_kg)} kg`),...insumosBajos().map(i=>`${i.nombre} con ${fmtN(stockInsumo(i))} ${i.unidad}`)];
   if(bajos.length&&!S.avisoNivel){S.avisoNivel=true;toast(`Nivel bajo: ${bajos.join(' · ')}`)}
@@ -460,6 +466,50 @@ const silosBajos=()=>S.sil.filter(v=>v.activo!==false&&v.stock_kg!=null&&v.alert
 const enSilos=id=>S.sil.filter(v=>v.id_insumo===id).reduce((a,v)=>a+(+v.stock_kg||0),0);
 const stockInsumo=i=>(+i.stock||0)+enSilos(i.id_insumo);
 const insumosBajos=()=>S.ins.filter(i=>i.activo!==false&&i.stock_minimo!=null&&stockInsumo(i)<=+i.stock_minimo);
+/* Imágenes de equipos: un archivo por equipo en el bucket privado "equipos", con el ID como nombre. Si fallan, la aplicación sigue sin ellas. */
+const IMG_HORAS=6, IMG_MB=5, IMG_EXT={'image/jpeg':'jpg','image/png':'png','image/webp':'webp'};
+async function cargarImagenes(){
+  const {data:list,error}=await sb.storage.from('equipos').list('',{limit:1000});
+  if(error) return;
+  const paths=list.map(f=>f.name).filter(n=>!n.startsWith('.'));
+  const m=new Map();
+  if(paths.length){
+    const {data,error:e2}=await sb.storage.from('equipos').createSignedUrls(paths,(IMG_HORAS+1)*3600);
+    if(e2) return;
+    for(const f of data) if(f.signedUrl) m.set(f.path.replace(/\.[^.]+$/,''),{path:f.path,url:f.signedUrl});
+  }
+  S.imgs=m;S.imgsAt=Date.now();render();
+}
+/* Con idFijo la imagen va a ese equipo; si no, el nombre del archivo indica el equipo (TR-10.jpg). */
+async function subirImagenes(files,idFijo){
+  if(S.imgBusy) return;
+  const issues=[];let ok=0;
+  S.imgBusy=true;render();
+  for(const f of files){
+    const id=idFijo||f.name.replace(/\.[^.]+$/,'').trim().toUpperCase(), ext=IMG_EXT[f.type];
+    if(!S.eq.has(id)){issues.push(`${f.name}: no existe un equipo con el ID ${id}.`);continue}
+    if(!ext){issues.push(`${f.name}: usa una imagen JPG, PNG o WEBP.`);continue}
+    if(f.size>IMG_MB*1048576){issues.push(`${f.name}: pesa más de ${IMG_MB} MB.`);continue}
+    const path=`${id}.${ext}`, antes=S.imgs.get(id)?.path;
+    const {error}=await sb.storage.from('equipos').upload(path,f,{upsert:true,contentType:f.type});
+    if(error){issues.push(`${f.name}: ${errMsg(error)}`);continue}
+    if(antes&&antes!==path) await sb.storage.from('equipos').remove([antes]);
+    ok++;
+  }
+  S.imgBusy=false;S.importIssues=issues;S.importKind='maquinaria';
+  await cargarImagenes();
+  render();
+  toast(`${ok} imagen${ok===1?'':'es'} cargada${ok===1?'':'s'}${issues.length?` · ${issues.length} con problemas`:''}`);
+}
+async function quitarImagen(id){
+  const im=S.imgs.get(id); S.imgConf=null;
+  if(im){
+    const {error}=await sb.storage.from('equipos').remove([im.path]);
+    if(error){toast(errMsg(error));render();return}
+    S.imgs.delete(id);toast('Imagen quitada');
+  }
+  render();
+}
 /* Carga de cada módulo de registros, al abrirlo por primera vez. */
 const MOD_LOAD={
   combustible:async()=>{
@@ -503,7 +553,7 @@ function clearData(){
   S.eq=new Map();S.docs=new Map();S.ops=new Map();S.plan=new Map();S.loaded=false;S.open=null;S.rec=null;S.opEdit=null;S.importIssues=[];
   S.comb=[];S.mant=[];S.fact=[];S.reb=[];S.control=[];S.leche=[];S.consumo=new Map();S.costo=new Map();
   S.estq=[];S.dest=[];S.labs=[];S.ing=[];S.med=[];S.stockEst=[];S.avisoNivel=false;S.nivelErr={};
-  S.ins=[];S.sil=[];S.movs=[];
+  S.ins=[];S.sil=[];S.movs=[];S.imgs=new Map();S.imgsAt=0;S.imgConf=null;
   for(const m in S.mods) S.mods[m]={};
 }
 const isAuthErr=e=>e&&(e.code==='PGRST301'||e.code==='PGRST303'||/jwt/i.test(e.message||''));
@@ -580,6 +630,7 @@ function renderMaquinaria(){
   const L=v=>loading?'…':v;
   m.innerHTML=`
   ${head('Equipos','Ficha, estado y documentación de la maquinaria de los fundos',`
+      <button class="btn" data-act="img-lote" ${off||S.imgBusy?'disabled':''}>${S.imgBusy?'Cargando imágenes…':'Cargar imágenes'}</button>
       <button class="btn" data-act="import" data-kind="maquinaria" ${off?'disabled':''}>Importar Excel</button>
       <button class="btn primary" data-act="new" ${off?'disabled':''}>Nuevo equipo</button>`)}
   ${modBanners()}
@@ -610,8 +661,9 @@ function renderEquipos(eqs,loading){
   </div>
   <div class="card"><div class="tablewrap">
   ${loading?'<div class="empty">Cargando equipos…</div>':!eqs.length?`<div class="empty"><strong>Aún no hay equipos</strong>Importa el Excel de maquinaria o crea el primer equipo con “Nuevo equipo”.</div>`:!rows.length?'<div class="empty">Ningún equipo coincide con los filtros.</div>':`
-  <table><thead><tr><th>ID</th><th>Equipo</th><th>Tipo</th><th>Centro</th><th>Operador</th><th>Estado</th><th class="num">Lectura actual</th><th>Próx. mantención</th><th>Documentos</th><th>Ficha</th></tr></thead><tbody>
-  ${rows.map(e=>{const g=gaps(e),mt=mant(e),wd=worstDoc(e.id_maquina);return `<tr data-open="${esc(e.id_maquina)}" tabindex="0">
+  <table><thead><tr><th aria-label="Imagen"></th><th>ID</th><th>Equipo</th><th>Tipo</th><th>Centro</th><th>Operador</th><th>Estado</th><th class="num">Lectura actual</th><th>Próx. mantención</th><th>Documentos</th><th>Ficha</th></tr></thead><tbody>
+  ${rows.map(e=>{const g=gaps(e),mt=mant(e),wd=worstDoc(e.id_maquina),im=S.imgs.get(e.id_maquina);return `<tr data-open="${esc(e.id_maquina)}" tabindex="0">
+    <td>${im?`<img class="eqthumb" src="${esc(im.url)}" alt="" loading="lazy">`:'<div class="eqthumb"></div>'}</td>
     <td class="id">${esc(e.id_maquina)}</td>
     <td><div>${esc(e.nombre)}</div><div class="muted" style="font-size:12px">${esc([e.marca,e.modelo,e.patente].filter(Boolean).join(' · '))}</div></td>
     <td>${esc(e.tipo)}</td><td>${e.centro?esc(e.centro):'<span class="gap">Sin centro</span>'}</td>
@@ -1299,6 +1351,12 @@ function renderDrawer(){
     <div class="dhead"><div><div class="id muted">${isNew?'Nuevo equipo':esc(id)}</div><h2 id="dtitle">${isNew?'Ficha del equipo':esc(e.nombre||id)}</h2></div>
       <button class="btn ghost" data-act="close" aria-label="Cerrar">Cerrar</button></div>
     <form class="dbody" id="eqform" novalidate>
+      ${isNew?'':`<div class="eqfoto">
+        ${S.imgs.has(id)?`<img src="${esc(S.imgs.get(id).url)}" alt="Imagen de ${esc(e.nombre||id)}">`:''}
+        <div class="actions">
+          <button type="button" class="btn" data-act="img-una" data-val="${esc(id)}" ${S.imgBusy?'disabled':''}>${S.imgBusy?'Cargando…':S.imgs.has(id)?'Cambiar imagen':'Agregar imagen'}</button>
+          ${!S.imgs.has(id)?'':S.imgConf===id?`<span class="confirm">¿Quitar la imagen? <button type="button" class="btn danger" data-act="img-quitar-si" data-val="${esc(id)}">Quitar</button><button type="button" class="btn ghost" data-act="img-quitar-no">Cancelar</button></span>`:`<button type="button" class="btn ghost" data-act="img-quitar" data-val="${esc(id)}">Quitar</button>`}
+        </div></div>`}
       ${!isNew&&g.length?`<div class="banner" style="margin:0">Falta completar: ${g.join(', ')}.</div>`:''}
       <fieldset><legend>Identificación</legend>
         ${fld('e-id','ID del equipo',id,{ro:!isNew,ph:'TR-30'})}
@@ -1382,6 +1440,7 @@ async function deleteEquipo(){
     if((c.count||0)+(m.count||0)>0){S.saving=false;S.confirmDel=false;S.formErr=`${id} tiene cargas de combustible o mantenciones registradas, así que no se puede eliminar. Cambia su estado a “Baja” o “Vendida”.`;renderDrawer();return}
     await must(sb.from('documentos').delete().eq('id_maquina',id));
     await must(sb.from('equipos').delete().eq('id_maquina',id));
+    if(S.imgs.has(id)){await sb.storage.from('equipos').remove([S.imgs.get(id).path]);S.imgs.delete(id)}
     S.saving=false;S.open=null;S.confirmDel=false;toast(`${id} eliminado`);await load();
   }catch(err){S.saving=false;S.formErr=errMsg(err);renderDrawer()}
 }
@@ -2357,6 +2416,11 @@ document.addEventListener('click',ev=>{
   else if(a==='del-yes'){deleteEquipo()}
   else if(a==='rec-del-yes'){deleteRec()}
   else if(a==='import'){S.importKind=t.dataset.kind;$('#xls').click()}
+  else if(a==='img-lote'){S.imgFor=null;$('#imgs').multiple=true;$('#imgs').click()}
+  else if(a==='img-una'){S.imgFor=t.dataset.val;$('#imgs').multiple=false;$('#imgs').click()}
+  else if(a==='img-quitar'){S.imgConf=t.dataset.val;renderDrawer()}
+  else if(a==='img-quitar-no'){S.imgConf=null;renderDrawer()}
+  else if(a==='img-quitar-si'){quitarImagen(t.dataset.val)}
   else if(a==='op-cancel'){S.opEdit=null;S.formErr='';render()}
   else if(a==='reload'){S.loadErr='';render();load()}
   else if(a==='reload-mod'){S.mods[t.dataset.kind].err='';loadMod(t.dataset.kind)}
@@ -2386,6 +2450,7 @@ document.addEventListener('change',ev=>{
   const el=ev.target;
   if(el.id==='f-centro'){S.centro=el.value;render();return}
   if(el.id==='xls'){const f=el.files[0];if(f){if(S.importKind==='maquinaria')importXls(f);else importReg(S.importKind,f)}el.value='';return}
+  if(el.id==='imgs'){const fs=[...el.files];if(fs.length)subirImagenes(fs,S.imgFor);el.value='';return}
   if(el.dataset.set){const [o,k]=el.dataset.set.split('.');S[o][k]=el.value;if(o==='lc'&&k==='from'&&S.lc.to<el.value)S.lc.to=el.value;if(o==='lc'&&k==='to'&&S.lc.from>el.value)S.lc.from=el.value;render();return}
   /* al cambiar el equipo o la fecha de un registro, se actualiza la última lectura de horómetro */
   if(S.rec&&(el.id==='r-eq'||el.id==='r-fecha')&&(S.rec.kind==='comb'||S.rec.kind==='mant')){S.rec.data={...S.rec.data,...REC[S.rec.kind].read()};S.warn='';S.warnAck=false;renderDrawer()}
