@@ -50,10 +50,10 @@ button,input,select{font:inherit;color:inherit}
 .tag{padding:0 20px 18px;font-size:11.5px;color:var(--brand-muted);border-bottom:1px solid rgba(255,255,255,.08)}
 .nav{display:flex;flex-direction:column;gap:2px;padding:12px 10px}
 .navgrp{font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--brand-muted);padding:12px 12px 4px}
-.nav button{all:unset;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;border-radius:7px;color:var(--brand-fg);opacity:.78;font-size:14px}
-.nav button:hover{opacity:1;background:rgba(255,255,255,.05)}
+.nav button,.nav a{all:unset;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;border-radius:7px;color:var(--brand-fg);opacity:.78;font-size:14px}
+.nav button:hover,.nav a:hover{opacity:1;background:rgba(255,255,255,.05)}
 .nav button[aria-current="page"]{opacity:1;background:var(--brand-soft);font-weight:500}
-.nav button:focus-visible{outline:2px solid var(--brand-muted);outline-offset:1px}
+.nav button:focus-visible,.nav a:focus-visible{outline:2px solid var(--brand-muted);outline-offset:1px}
 .soon{font-size:10.5px;color:var(--brand-muted)}
 .sidefoot{margin-top:auto;padding:14px 20px;font-size:11px;color:var(--brand-muted);border-top:1px solid rgba(255,255,255,.08);display:flex;flex-direction:column;gap:4px;min-width:0}
 .sidefoot .who{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -196,7 +196,7 @@ textarea.field{min-height:72px;resize:vertical;font:inherit;font-size:13.5px}
   .sidefoot{flex-direction:row;justify-content:space-between;align-items:center;padding:8px max(16px,env(safe-area-inset-left,0px));border-top:none}
   .logo{padding:14px max(16px,env(safe-area-inset-left,0px)) 4px}
   .nav{flex-direction:row;overflow-x:auto;padding:6px 10px 10px}
-  .nav button{white-space:nowrap}
+  .nav button,.nav a{white-space:nowrap}
   main{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:18px 48px}
   .summary,.summary.s4{grid-template-columns:repeat(2,minmax(0,1fr))}
   .summary>.stat:last-child:nth-child(odd){grid-column:1/-1}
@@ -252,6 +252,7 @@ const MODS=[
   {grp:'Lechería'},{id:'leche',label:'Leche'},{id:'rebano',label:'Rebaño'},
   {grp:'Maquinaria'},{id:'maquinaria',label:'Equipos'},{id:'mantenciones',label:'Mantenciones'},{id:'combustible',label:'Combustible'},
   {grp:'Insumos'},{id:'inventario',label:'Inventario'},
+  {grp:'Terreno'},{id:'mapa',label:'Mapa',href:'mapa.html'},
   {grp:'Infraestructura'},{id:'energia',label:'Energía',soon:true}
 ];
 const PH={energia:['Energía','Consumo eléctrico por edificio y fundo. Se arma cuando estén las planillas de consumo y medidores en la carpeta del proyecto.']};
@@ -597,7 +598,7 @@ const loadingBox=t=>`<div class="card"><div class="empty">${t}</div></div>`;
 
 /* ---------- render ---------- */
 function renderNav(){
-  $('#nav').innerHTML=MODS.map(m=>m.grp?`<div class="navgrp">${m.grp}</div>`:
+  $('#nav').innerHTML=MODS.map(m=>m.grp?`<div class="navgrp">${m.grp}</div>`:m.href?`<a href="${m.href}">${m.label}</a>`:
     `<button data-mod="${m.id}" ${S.mod===m.id?'aria-current="page"':''}>${m.label}${m.soon?'<span class="soon">pronto</span>':''}${(m.id==='combustible'&&estanquesBajos().length)||(m.id==='inventario'&&silosBajos().length+insumosBajos().length)?'<span class="navalerta">Nivel bajo</span>':''}</button>`).join('');
   $('#sidefoot').innerHTML=`<span class="who" title="${esc(S.user?.email)}">${esc(S.user?.email||'')}</span><button class="linkbtn" data-act="logout">Cerrar sesión</button>`;
 }
