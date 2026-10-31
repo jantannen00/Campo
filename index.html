@@ -163,6 +163,17 @@ label.f .field{color:var(--fg);font-size:13.5px;width:100%}
 textarea.field{min-height:72px;resize:vertical;font:inherit;font-size:13.5px}
 .drop{grid-column:1/-1;border:1.5px dashed var(--line-strong);border-radius:10px;padding:14px;background:var(--sunk);display:flex;flex-direction:column;gap:6px;font-size:13px}
 .ok{color:var(--ok)}
+.navalerta{font-size:10.5px;font-weight:500;padding:1px 7px;border-radius:999px;background:var(--bad-bg);color:var(--bad);white-space:nowrap}
+.niveles{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:14px;margin-bottom:16px}
+.niveles .panel{margin-bottom:0}
+.nivel{display:flex;gap:18px;align-items:center;flex-wrap:wrap}
+.nivel svg{flex:none;max-width:100%}
+.nivel text{fill:var(--muted);font-size:11px;font-family:var(--mono)}
+.nivelinfo{flex:1 1 220px;min-width:0;display:flex;flex-direction:column;gap:6px}
+.nivelinfo h3{margin:0}
+.nivelnum{font-family:var(--mono);font-size:30px;font-weight:500;letter-spacing:-.02em;line-height:1.1}
+.nivelform{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-top:6px}
+.nivelform .f{flex:1 1 110px}
 .need .field{border-color:var(--warn)}
 .calc{grid-column:1/-1;background:var(--sunk);border-radius:9px;padding:10px 12px;font-size:13px;display:flex;gap:18px;flex-wrap:wrap}
 .calc b{font-family:var(--mono);font-weight:500}
@@ -284,7 +295,7 @@ const S={mod:'maquinaria',tab:'equipos',q:'',tipo:'Todos',centro:'Todos',docf:'P
   eq:new Map(),docs:new Map(),ops:new Map(),plan:new Map(),loaded:false,loading:false,loadErr:'',loadedAt:0,
   comb:[],mant:[],fact:[],reb:[],control:[],leche:[],consumo:new Map(),costo:new Map(),
   mods:{combustible:{},mantenciones:{},rebano:{},leche:{}},
-  estq:[],dest:[],labs:[],ing:[],med:[],lEdit:null,lConf:false,lErr:'',
+  estq:[],dest:[],labs:[],ing:[],med:[],lEdit:null,lConf:false,lErr:'',stockEst:[],avisoNivel:false,nivelErr:{},
   cb:{tab:'cargas',per:'90',eq:'Todos',est:'',lista:'choferes'},mt:{tab:'intervenciones',per:'365',eq:'Todos',tipo:'Todos'},
   rb:{tab:'ultimo',centro:'Todos'},lc:{sala:'Todos',from:'',to:'',met:'litros'},
   open:null,rec:null,confirmDel:false,formErr:'',warn:'',warnAck:false,opEdit:null,saving:false,importIssues:[],importKind:null};
@@ -408,15 +419,16 @@ async function fetchAll(table,select,order){
 async function load(){
   if(S.loading) return;
   S.loading=true;
-  const [eq,dc,op,tp,pm]=await Promise.all([
+  const [eq,dc,op,tp,pm,stk]=await Promise.all([
     sb.from('equipos').select(EQ_COLS.join(',')),
     sb.from('documentos').select('id_maquina,documento,vencimiento,situacion,texto_original'),
     sb.from('operadores').select('id_operador,nombre,centro,activo'),
     sb.from('tipos_equipo').select('tipo,usa_horometro'),
-    sb.from('v_proxima_mantencion').select('id_maquina,horometro_actual,proxima_mant_horometro,horas_restantes,estado_plan,horometro_ultima_preventiva,fecha_ultima_preventiva')
+    sb.from('v_proxima_mantencion').select('id_maquina,horometro_actual,proxima_mant_horometro,horas_restantes,estado_plan,horometro_ultima_preventiva,fecha_ultima_preventiva'),
+    sb.from('v_estanque_stock').select('*').order('id_estanque')
   ]);
   S.loading=false;
-  const bad=[eq,dc,op,tp,pm].find(r=>r.error);
+  const bad=[eq,dc,op,tp,pm,stk].find(r=>r.error);
   if(bad){S.loadErr=errMsg(bad.error);if(isAuthErr(bad.error)){await sb.auth.signOut();return}render();return}
   S.loadErr='';S.loaded=true;S.loadedAt=Date.now();
   const tipos=tp.data.map(t=>t.tipo);
@@ -426,8 +438,13 @@ async function load(){
   S.docs=new Map(dc.data.filter(d=>DOC_K[d.documento]).map(d=>[d.id_maquina+'__'+DOC_K[d.documento],{...d,vencimiento:d.vencimiento?d.vencimiento.slice(0,7):null}]));
   S.ops=new Map(op.data.map(o=>[o.id_operador,{...o,activo:o.activo?'Sí':'No'}]));
   S.plan=new Map(pm.data.map(p=>[p.id_maquina,p]));
+  S.stockEst=stk.data;
   render();
+  /* aviso al entrar, una vez por sesión; después queda la marca en el menú y el aviso en Combustible */
+  const bajos=estanquesBajos();
+  if(bajos.length&&!S.avisoNivel){S.avisoNivel=true;toast(`Nivel bajo: ${bajos.map(v=>`${v.nombre} con ${fmt0(v.stock_calculado)} L`).join(' · ')}`)}
 }
+const estanquesBajos=()=>S.stockEst.filter(v=>v.activo!==false&&v.alerta_litros!=null&&+v.stock_calculado<=+v.alerta_litros);
 /* Carga de cada módulo de registros, al abrirlo por primera vez. */
 const MOD_LOAD={
   combustible:async()=>{
@@ -466,7 +483,7 @@ const ready=(...ms)=>S.loaded&&ms.every(m=>S.mods[m].loaded);
 function clearData(){
   S.eq=new Map();S.docs=new Map();S.ops=new Map();S.plan=new Map();S.loaded=false;S.open=null;S.rec=null;S.opEdit=null;S.importIssues=[];
   S.comb=[];S.mant=[];S.fact=[];S.reb=[];S.control=[];S.leche=[];S.consumo=new Map();S.costo=new Map();
-  S.estq=[];S.dest=[];S.labs=[];S.ing=[];S.med=[];
+  S.estq=[];S.dest=[];S.labs=[];S.ing=[];S.med=[];S.stockEst=[];S.avisoNivel=false;S.nivelErr={};
   for(const m in S.mods) S.mods[m]={};
 }
 const isAuthErr=e=>e&&(e.code==='PGRST301'||e.code==='PGRST303'||/jwt/i.test(e.message||''));
@@ -510,7 +527,7 @@ const loadingBox=t=>`<div class="card"><div class="empty">${t}</div></div>`;
 /* ---------- render ---------- */
 function renderNav(){
   $('#nav').innerHTML=MODS.map(m=>m.grp?`<div class="navgrp">${m.grp}</div>`:
-    `<button data-mod="${m.id}" ${S.mod===m.id?'aria-current="page"':''}>${m.label}${m.soon?'<span class="soon">pronto</span>':''}</button>`).join('');
+    `<button data-mod="${m.id}" ${S.mod===m.id?'aria-current="page"':''}>${m.label}${m.soon?'<span class="soon">pronto</span>':''}${m.id==='combustible'&&estanquesBajos().length?'<span class="navalerta">Nivel bajo</span>':''}</button>`).join('');
   $('#sidefoot').innerHTML=`<span class="who" title="${esc(S.user?.email)}">${esc(S.user?.email||'')}</span><button class="linkbtn" data-act="logout">Cerrar sesión</button>`;
 }
 function render(){
@@ -673,6 +690,7 @@ function renderComb(){
     <button class="btn" data-act="rec-new" data-kind="ing" ${ok?'':'disabled'}>Registrar ingreso</button>
     <button class="btn primary" data-act="rec-new" data-kind="comb" ${ok?'':'disabled'}>Nueva carga</button>`)}
   ${modBanners('combustible','mantenciones')}
+  ${estanquesBajos().map(v=>`<div class="banner err"><span><b>Nivel bajo en ${esc(v.nombre)}:</b> quedan ${fmt0(v.stock_calculado)} L y el aviso está en ${fmt0(v.alerta_litros)} L.</span><button class="btn" data-act="rec-new" data-kind="ing">Registrar ingreso</button></div>`).join('')}
   <div class="filters">${perChips('cb')} ${selSet('cb.eq','Destino',eqOpts,fe)}</div>
   <div class="summary s4">
     ${stat(L(fmt0(litros))+'<small>L</small>',`Litros despachados en el período · ${rows.length} carga${rows.length===1?'':'s'}`)}
@@ -680,6 +698,7 @@ function renderComb(){
     ${stat(L(fmt0(stockTot))+'<small>L</small>','Stock calculado en estanques (hoy)')}
     ${stat(L(lh==null?'—':fmt1(lh))+'<small>L/h</small>',fe==='Todos'?'Consumo de tractores y maquinaria (histórico)':'Consumo del equipo (histórico)')}
   </div>
+  ${ok?panelNiveles():''}
   ${tabsHtml('cb',[['cargas','Cargas',todos.length],['estanques','Estanques',S.estq.length],['consumo','Rendimiento y costo por equipo',null],['listas','Listas',null]])}
   <div id="pane"></div>`;
   if(!ok){$('#pane').innerHTML=loadingBox(st.err?'No se pudieron cargar los datos de combustible.':'Cargando combustible…');return}
@@ -687,6 +706,58 @@ function renderComb(){
   else if(S.cb.tab==='estanques') renderEstanques();
   else if(S.cb.tab==='consumo') renderConsumo(fe);
   else renderListas();
+}
+/* Nivel de estanques: el dibujo es un estanque vertical, así la altura del líquido es proporcional a los litros. */
+function tanqueSvg(v){
+  const cap=+v.capacidad_l||0, st=+v.stock_calculado, al=v.alerta_litros==null?null:+v.alerta_litros;
+  const X=30,W=96,T=24,H=168,y=p=>T+H*(1-p), pct=cap?Math.min(1,Math.max(0,st/cap)):0;
+  const nivel=al!=null&&st<=al?'--bad':al!=null&&st<=al*1.25?'--warn':'--accent';
+  let marcas='';
+  if(cap) for(const p of [0,.25,.5,.75,1]) marcas+=`<line x1="${X+W}" x2="${X+W+6}" y1="${y(p)}" y2="${y(p)}" style="stroke:var(--line-strong)"/><text x="${X+W+10}" y="${y(p)+4}">${nf0.format(cap*p)}</text>`;
+  const linea=cap&&al!=null&&al<=cap?`<line x1="${X-8}" x2="${X+W}" y1="${y(al/cap)}" y2="${y(al/cap)}" style="stroke:var(--bad)" stroke-width="2"/><text x="${X-10}" y="${y(al/cap)+4}" text-anchor="end">!</text>`:'';
+  const id='tq-'+v.id_estanque;
+  return `<svg width="196" height="214" viewBox="0 0 196 214" role="img" aria-label="${esc(v.nombre)}: ${fmt0(st)} litros${cap?' de '+fmt0(cap):''}">
+    <defs><clipPath id="${id}"><rect x="${X}" y="${T}" width="${W}" height="${H}" rx="12"/></clipPath></defs>
+    <rect x="${X+W/2-13}" y="10" width="26" height="14" rx="3" style="fill:var(--line-strong)"/>
+    <rect x="${X}" y="${T}" width="${W}" height="${H}" rx="12" style="fill:var(--sunk)"/>
+    ${cap&&pct>0?`<rect x="${X}" y="${y(pct)}" width="${W}" height="${H*pct}" clip-path="url(#${id})" style="fill:var(${nivel})"/>`:''}
+    ${marcas}
+    <rect x="${X}" y="${T}" width="${W}" height="${H}" rx="12" fill="none" style="stroke:var(--line-strong)" stroke-width="2"/>
+    ${linea}
+    <rect x="${X+8}" y="${T+H}" width="10" height="16" style="fill:var(--line-strong)"/><rect x="${X+W-18}" y="${T+H}" width="10" height="16" style="fill:var(--line-strong)"/>
+    <rect x="${X-4}" y="${T+H+14}" width="${W+8}" height="4" rx="2" style="fill:var(--line-strong)"/>
+  </svg>`;
+}
+function panelNiveles(){
+  const vs=S.stockEst.filter(v=>v.mostrar_nivel&&v.activo!==false);
+  if(!vs.length) return '';
+  return `<div class="niveles">${vs.map(v=>{
+    const st=+v.stock_calculado, cap=+v.capacidad_l||0, al=v.alerta_litros==null?null:+v.alerta_litros;
+    const est=al==null?['p-neu','Sin aviso configurado']:st<=al?['p-bad','Nivel bajo']:st<=al*1.25?['p-warn','Cerca del aviso']:['p-ok','Nivel normal'];
+    const ult=[...S.comb.filter(c=>c.id_estanque===v.id_estanque||c.id_estanque_destino===v.id_estanque).map(c=>c.fecha),...S.ing.filter(i=>i.id_estanque===v.id_estanque).map(i=>i.fecha)].sort().pop();
+    return `<div class="panel nivel">${tanqueSvg(v)}
+      <div class="nivelinfo">
+        <h3>${esc(v.nombre)}</h3>
+        <div class="nivelnum ${st<0?'bad':''}">${fmt0(st)} L</div>
+        <div class="muted">${cap?`${fmt0(st/cap*100)} % de ${fmt0(cap)} L`:'Indica la capacidad para dibujar el nivel'}</div>
+        <div><span class="pill ${est[0]}">${est[1]}</span></div>
+        <div class="note" style="margin:0">Stock calculado${ult?`, último movimiento el ${esc(ult)}`:''}${v.fecha_medicion?`. Última medición: ${fmt0(v.litros_medidos)} L el ${esc(v.fecha_medicion)}`:''}.</div>
+        <form class="nivelform" data-est="${esc(v.id_estanque)}" novalidate>
+          <label class="f">Capacidad (L)<input class="field" name="cap" id="n-cap-${esc(v.id_estanque)}" type="number" min="0" step="any" inputmode="decimal" value="${esc(v.capacidad_l??'')}"></label>
+          <label class="f">Avisar bajo (L)<input class="field" name="alerta" id="n-al-${esc(v.id_estanque)}" type="number" min="0" step="any" inputmode="decimal" value="${esc(v.alerta_litros??'')}"></label>
+          <button class="btn" type="submit">Guardar</button>
+          <div class="err" style="flex-basis:100%" ${S.nivelErr[v.id_estanque]?'':'hidden'}>${esc(S.nivelErr[v.id_estanque]||'')}</div>
+        </form>
+      </div></div>`}).join('')}</div>`;
+}
+async function guardarNivel(form){
+  const id=form.dataset.est, n=name=>{const t=form.querySelector(`[name=${name}]`).value.trim();return t===''?null:+t.replace(',','.')};
+  const cap=n('cap'), al=n('alerta');
+  const err=cap!=null&&!(cap>0)?'La capacidad debe ser mayor que cero.':al!=null&&!(al>=0)?'El aviso no puede ser negativo.':cap!=null&&al!=null&&al>cap?'El aviso no puede ser mayor que la capacidad.':'';
+  S.nivelErr[id]=err;
+  if(err){render();return}
+  try{await must(sb.from('estanques').update({capacidad_l:cap,alerta_litros:al}).eq('id_estanque',id));toast('Nivel del estanque guardado');await Promise.all([load(),loadMod('combustible')])}
+  catch(e){S.nivelErr[id]=errMsg(e);render()}
 }
 function renderCargas(list){
   list=list.slice().sort((a,b)=>b.fecha.localeCompare(a.fecha)||byId(b.id_carga,a.id_carga));
@@ -743,19 +814,45 @@ function renderEstanques(){
 function renderConsumo(fe){
   const ids=new Set([...S.comb.map(r=>r.id_maquina),...S.mant.map(r=>r.id_maquina)].filter(Boolean));
   const lit=new Map();for(const r of S.comb) if(r.id_maquina) lit.set(r.id_maquina,(lit.get(r.id_maquina)||0)+(+r.litros));
-  const list=[...ids].filter(id=>fe==='Todos'||id===fe).map(id=>{const k=S.consumo.get(id)||{},co=S.costo.get(id)||{};return {id,u:unidadDe(id),litros:lit.get(id)||0,med:k.horas,lh:k.litros_hora,kml:k.km_litro,comb:+co.costo_combustible||0,mant:+co.costo_mantenciones||0,tot:+co.costo_total||0,sin:+co.litros_sin_precio||0}})
+  const list=[...ids].filter(id=>fe==='Todos'||id===fe).map(id=>{const k=S.consumo.get(id)||{},co=S.costo.get(id)||{};return {id,u:unidadDe(id),litros:lit.get(id)||0,med:k.horas,lh:k.litros_hora,kml:k.km_litro,ok:+k.tramos||0,desc:+k.tramos_descartados||0,comb:+co.costo_combustible||0,mant:+co.costo_mantenciones||0,tot:+co.costo_total||0,sin:+co.litros_sin_precio||0}})
     .sort((a,b)=>b.tot-a.tot||byId(a.id,b.id));
+  const rev=lecturasARevisar(fe);
   const otros=S.dest.map(d=>{const rs=S.comb.filter(c=>c.id_destino===d.id_destino);return {d,l:sum(rs,'litros'),c:rs.filter(r=>r.precio_litro!=null).reduce((a,r)=>a+r.litros*r.precio_litro,0)}}).filter(x=>x.l>0).sort((a,b)=>b.l-a.l);
   $('#pane').innerHTML=`<div class="card"><div class="tablewrap">${!list.length?'<div class="empty"><strong>Sin datos todavía</strong>Aparecerán aquí los equipos con cargas de combustible o mantenciones.</div>':`
-  <table><thead><tr><th>Equipo</th><th class="num">Litros cargados</th><th class="num">Uso medido</th><th class="num">Rendimiento</th><th class="num">Combustible</th><th class="num">Mantenciones</th><th class="num">Costo total</th></tr></thead><tbody>
+  <table><thead><tr><th>Equipo</th><th class="num">Litros cargados</th><th class="num">Uso medido</th><th class="num">Rendimiento</th><th class="num">Tramos</th><th class="num">Combustible</th><th class="num">Mantenciones</th><th class="num">Costo total</th></tr></thead><tbody>
   ${list.map(r=>`<tr><td><span class="id">${esc(r.id)}</span> <span class="muted">${esc(eqName(r.id))}</span></td>
     <td class="num">${fmt0(r.litros)}</td><td class="num">${r.med==null?'—':fmtN(r.med)+' '+(r.u==='km'?'km':'h')}</td>
     <td class="num">${r.u==='km'?(r.kml==null?'—':fmt1(r.kml)+' km/L'):(r.lh==null?'—':fmt1(r.lh)+' L/h')}</td>
+    <td class="num">${r.ok}${r.desc?` <span class="gap" title="tramos descartados por lecturas imposibles">+${r.desc} desc.</span>`:''}</td>
     <td class="num">${clp(r.comb)}${r.sin?` <span class="gap" title="${fmt0(r.sin)} L sin precio">*</span>`:''}</td><td class="num">${clp(r.mant)}</td><td class="num"><b>${clp(r.tot)}</b></td></tr>`).join('')}
   </tbody></table>`}</div></div>
   ${otros.length?`<div class="panel" style="margin-top:16px"><h3>Otros destinos</h3><div class="tablewrap"><table><thead><tr><th>Destino</th><th>Tipo</th><th class="num">Litros</th><th class="num">Costo</th></tr></thead><tbody>
     ${otros.map(x=>`<tr><td>${esc(x.d.nombre)}</td><td>${esc(x.d.tipo)}</td><td class="num">${fmt0(x.l)}</td><td class="num">${clp(x.c)}</td></tr>`).join('')}</tbody></table></div></div>`:''}
-  <p class="note">Todo el historial. Rendimiento entre dos cargas con estanque lleno: L/h en tractores y maquinaria (horómetro), km/L en camionetas y camiones (odómetro). * = hay litros sin precio, que no suman al costo.</p>`;
+  ${rev.length?`<div class="panel" style="margin-top:16px"><h3>Lecturas a revisar (${rev.length})</h3><div class="tablewrap"><table>
+    <thead><tr><th>Equipo</th><th>Carga</th><th>Fecha</th><th class="num">Lectura anterior</th><th class="num">Esta lectura</th><th class="num">Diferencia</th><th class="num">Litros</th><th>Motivo</th></tr></thead><tbody>
+    ${rev.slice(0,150).map(x=>`<tr data-rec="comb" data-key="${esc(x.c.id_carga)}" tabindex="0"><td><span class="id">${esc(x.c.id_maquina)}</span> <span class="muted">${esc(eqName(x.c.id_maquina))}</span></td><td class="id">${esc(x.c.id_carga)}</td><td class="num" style="text-align:left">${esc(x.c.fecha)}</td>
+      <td class="num">${fmtN(x.antes)}</td><td class="num"><b>${fmtN(x.c.horometro)}</b></td><td class="num ${x.dif<0?'bad':''}">${x.dif>0?'+':''}${fmtN(x.dif)} ${x.u}</td><td class="num">${fmt1(x.c.litros)}</td><td class="gap">${esc(x.motivo)}</td></tr>`).join('')}
+    </tbody></table></div><p class="note">Abre la carga para corregir la lectura. Si la lectura es correcta pero esa carga no llenó el estanque, desmarca “lleno”. Estos tramos no entran al rendimiento.</p></div>`:''}
+  <p class="note">Todo el historial. Rendimiento entre dos cargas con estanque lleno: L/h en tractores y maquinaria (horómetro), km/L en camionetas y camiones (odómetro). Los tramos con valores imposibles (fuera de 0,5–80 L/h o 0,5–40 km/L) se descartan. * = hay litros sin precio, que no suman al costo.</p>`;
+}
+/* Lecturas que dan tramos imposibles: retrocede, no avanza, o el rendimiento sale fuera de rango. */
+function lecturasARevisar(fe){
+  const out=[], porEq=new Map();
+  for(const c of S.comb) if(c.id_maquina&&c.horometro!=null&&(fe==='Todos'||c.id_maquina===fe)) (porEq.get(c.id_maquina)||porEq.set(c.id_maquina,[]).get(c.id_maquina)).push(c);
+  for(const [id,cs] of porEq){
+    const km=unidadDe(id)==='km', u=km?'km':'h';
+    cs.sort((a,b)=>a.fecha.localeCompare(b.fecha)||(+a.horometro-+b.horometro)||byId(a.id_carga,b.id_carga));
+    for(let i=1;i<cs.length;i++){
+      const a=cs[i-1],b=cs[i],dif=+b.horometro-+a.horometro,l=+b.litros;
+      let motivo='';
+      if(dif<0) motivo='La lectura retrocede';
+      else if(dif===0) motivo='Misma lectura que la carga anterior';
+      else if(km&&(dif/l<0.5||dif/l>40)) motivo=`Da ${fmt1(dif/l)} km/L`;
+      else if(!km&&(l/dif<0.5||l/dif>80)) motivo=`Da ${fmt1(l/dif)} L/h`;
+      if(motivo) out.push({c:b,antes:+a.horometro,dif,u,motivo});
+    }
+  }
+  return out.sort((x,y)=>byId(x.c.id_maquina,y.c.id_maquina)||x.c.fecha.localeCompare(y.c.fecha));
 }
 /* ---------- listas configurables: choferes, labores, otros destinos, estanques ---------- */
 const LISTAS={
@@ -773,17 +870,17 @@ const LISTAS={
   estanques:{t:'Estanques',tabla:'estanques',pk:'id_estanque',pref:'EST',
     items:()=>S.estq.map(e=>({pk:e.id_estanque,nombre:e.nombre,activo:e.activo,raw:e})),
     uso:pk=>S.comb.filter(c=>c.id_estanque===pk||c.id_estanque_destino===pk).length+S.ing.filter(i=>i.id_estanque===pk).length,
-    extra:[['l-cap','Capacidad (L)','capacidad_l','num'],['l-centro','Centro','centro',CENTROS]]}
+    extra:[['l-cap','Capacidad (L)','capacidad_l','num'],['l-alerta','Avisar bajo (L)','alerta_litros','num'],['l-centro','Centro','centro',CENTROS],['l-nivel','Mostrar nivel','mostrar_nivel','bool']]}
 };
 function renderListas(){
   const k=S.cb.lista, Lc=LISTAS[k], items=Lc.items().sort((a,b)=>(b.activo-a.activo)||a.nombre.localeCompare(b.nombre));
   const ed=S.lEdit?items.find(i=>String(i.pk)===String(S.lEdit)):null;
-  const xf=([id,label,campo,tipo])=>{const v=ed?ed.raw[campo]:null;return Array.isArray(tipo)?fld(id,label,null,{list:opt(tipo,v,campo!=='tipo')}):fld(id,label,v,{type:tipo==='num'?'number':'text'})};
+  const xf=([id,label,campo,tipo])=>{const v=ed?ed.raw[campo]:null;return tipo==='bool'?fld(id,label,null,{list:opt(['Sí','No'],v?'Sí':'No',false)}):Array.isArray(tipo)?fld(id,label,null,{list:opt(tipo,v,campo!=='tipo')}):fld(id,label,v,{type:tipo==='num'?'number':'text'})};
   $('#pane').innerHTML=`
   <div class="filters">${Object.entries(LISTAS).map(([key,l])=>`<button class="chip" data-act="lista" data-val="${key}" aria-pressed="${k===key}">${l.t} <span class="count">${l.items().filter(i=>i.activo).length}</span></button>`).join('')}</div>
   <div class="card">
     <form class="opform" id="listaform" novalidate style="grid-template-columns:repeat(${2+Lc.extra.length},minmax(0,1fr)) auto">
-      ${fld('l-nombre',ed?'Nombre':'Agregar '+Lc.t.toLowerCase().replace(/s$/,'').replace(/e$/,'')+' — nombre',ed?ed.nombre:'',{ph:k==='choferes'?'NOMBRE APELLIDO':''})}
+      ${fld('l-nombre',ed?'Nombre':'Agregar '+{choferes:'chofer',labores:'labor',destinos:'destino',estanques:'estanque'}[k]+' — nombre',ed?ed.nombre:'',{ph:k==='choferes'?'NOMBRE APELLIDO':''})}
       ${Lc.extra.map(xf).join('')}
       <div></div>
       <div class="actions"><button class="btn primary" type="submit">${ed?'Guardar':'Agregar'}</button>${ed?`<button class="btn" type="button" data-act="lista-activo">${ed.activo?'Desactivar':'Activar'}</button>
@@ -792,7 +889,7 @@ function renderListas(){
       <div class="err" style="grid-column:1/-1" ${S.lErr?'':'hidden'}>${esc(S.lErr)}</div>
     </form>
     <div class="tablewrap"><table><thead><tr><th>Nombre</th>${Lc.extra.map(([,l])=>`<th>${l}</th>`).join('')}<th>Estado</th><th class="num">Usos</th></tr></thead><tbody>
-    ${items.map(i=>`<tr data-act="lista-edit" data-val="${esc(i.pk)}" style="cursor:pointer" tabindex="0"><td>${esc(i.nombre)}</td>${Lc.extra.map(([,,campo])=>`<td>${esc(i.raw[campo]??'—')}</td>`).join('')}
+    ${items.map(i=>`<tr data-act="lista-edit" data-val="${esc(i.pk)}" style="cursor:pointer" tabindex="0"><td>${esc(i.nombre)}</td>${Lc.extra.map(([,,campo,tipo])=>`<td>${tipo==='bool'?(i.raw[campo]?'Sí':'No'):esc(i.raw[campo]??'—')}</td>`).join('')}
       <td>${i.activo?'<span class="pill p-ok">Activo</span>':'<span class="pill p-neu">Inactivo</span>'}</td><td class="num">${fmt0(Lc.uso(i.pk))}</td></tr>`).join('')}
     </tbody></table></div>
   </div>
@@ -810,7 +907,7 @@ async function guardarLista(){
       else await must(sb.from('labores').insert({labor:nombre}));
     }else{
       const row={nombre};
-      for(const [id,,campo,tipo] of Lc.extra){row[campo]=tipo==='num'?numv(id,1):(val(id)||null)}
+      for(const [id,,campo,tipo] of Lc.extra){row[campo]=tipo==='num'?numv(id,1):tipo==='bool'?val(id)==='Sí':(val(id)||null)}
       if(k==='destinos'&&!row.tipo) row.tipo='Otro';
       if(ed) await must(sb.from(Lc.tabla).update(row).eq(Lc.pk,ed.pk));
       else{
@@ -819,7 +916,7 @@ async function guardarLista(){
       }
     }
     S.lEdit=null;S.lErr='';S.lConf=false;toast(`${Lc.t}: “${nombre}” guardado`);
-    await (k==='choferes'?load():loadMod('combustible'));
+    await (k==='choferes'?load():k==='estanques'?Promise.all([load(),loadMod('combustible')]):loadMod('combustible'));
   }catch(e){S.lErr=errMsg(e);render()}
 }
 async function accionLista(accion){
@@ -1362,7 +1459,7 @@ const REC={
     warn:r=>r.tipo==='Compra'&&r.precio_litro==null?'La compra no tiene precio: los despachos seguirán valorizados con el precio de la compra anterior. Pulsa “Guardar igual” si no lo tienes.':'',
     async save(r,n,key){if(n) await must(sb.from('combustible_ingresos').insert(r)); else await must(sb.from('combustible_ingresos').update(r).eq('id_ingreso',key))},
     async del(key){await must(sb.from('combustible_ingresos').delete().eq('id_ingreso',key))},
-    done:'Ingreso guardado',after:['combustible']
+    done:'Ingreso guardado',after:['combustible','base']
   },
   med:{
     title:(r,n)=>n?'Medición de estanque':'Medición '+estNombre(r.id_estanque),
@@ -1386,7 +1483,7 @@ const REC={
     warn:()=>'',
     async save(r){await upsert('estanque_mediciones',[r],'id_estanque,fecha')},
     async del(key){const [id_estanque,fecha]=key.split('|');await must(sb.from('estanque_mediciones').delete().match({id_estanque,fecha}))},
-    done:'Medición guardada',after:['combustible']
+    done:'Medición guardada',after:['combustible','base']
   },
   mant:{
     title:(r,n)=>n?'Nueva intervención':'Intervención '+r.id_intervencion,
@@ -2078,6 +2175,7 @@ document.addEventListener('submit',async ev=>{
   if(ev.target.id==='eqform'){saveEquipo();return}
   if(ev.target.id==='recform'){saveRec();return}
   if(ev.target.id==='listaform'){guardarLista();return}
+  if(ev.target.classList.contains('nivelform')){guardarNivel(ev.target);return}
   if(ev.target.id!=='opform'||S.saving)return;
   const id=(val('op-id')||'').toUpperCase(),nombre=val('op-nombre');
   if(!RE_OP.test(id)){S.formErr='Escribe un ID con el formato OP-01.';render();return}
