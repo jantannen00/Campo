@@ -253,14 +253,13 @@ const MODS=[
   {grp:'Maquinaria'},{id:'maquinaria',label:'Equipos'},{id:'mantenciones',label:'Mantenciones'},{id:'combustible',label:'Combustible'},
   {grp:'Insumos'},{id:'inventario',label:'Inventario'},
   {grp:'Terreno'},{id:'mapa',label:'Mapa',href:'mapa.html'},
-  {grp:'Infraestructura'},{id:'energia',label:'Energía',soon:true}
+  {grp:'Infraestructura'},{id:'energia',label:'Energía'}
 ];
-const PH={energia:['Energía','Consumo eléctrico por edificio y fundo. Se arma cuando estén las planillas de consumo y medidores en la carpeta del proyecto.']};
 const TIPO_ORDEN=['Tractor','Camioneta','Camión','Excavadora','Cosechadora','Carro mezclador','Pulverizador','Generador','Remolque','Implemento','Otro'];
 const ESTADOS=['Activa','En reparación','Baja','Vendida'];
 const CENTROS=['S JORGE','S SEBAST','COPIHUE','LOS MELIES','PICHI JUAN','COMPARTIDO'];
 const SALAS=CENTROS.slice(0,5);
-const SALA_VAR={'S JORGE':'--s1','S SEBAST':'--s2','COPIHUE':'--s3','LOS MELIES':'--s4','PICHI JUAN':'--s5'};
+const SALA_VAR={'S JORGE':'--s1','S SEBAST':'--s2','COPIHUE':'--s3','LOS MELIES':'--s4','PICHI JUAN':'--s5','Casas':'--s1','Operación':'--s2','Medidores generales':'--s4','Consumo':'--s4','Límite':'--s3'};
 const salaColor=s=>`var(${SALA_VAR[s]||'--muted'})`;
 const DOCS=[['perm','Permiso de circulación'],['seguro','Seguro obligatorio'],['rt','Revisión técnica']];
 const DOC_K=Object.fromEntries(DOCS.map(([k,n])=>[n,k]));
@@ -303,8 +302,9 @@ const S={mod:'maquinaria',tab:'equipos',q:'',tipo:'Todos',centro:'Todos',docf:'P
   user:null,authReady:false,loginBusy:false,
   eq:new Map(),docs:new Map(),ops:new Map(),plan:new Map(),loaded:false,loading:false,loadErr:'',loadedAt:0,
   comb:[],mant:[],fact:[],reb:[],control:[],leche:[],consumo:new Map(),costo:new Map(),
-  mods:{combustible:{},mantenciones:{},rebano:{},leche:{},inventario:{}},
+  mods:{combustible:{},mantenciones:{},rebano:{},leche:{},inventario:{},energia:{}},
   ins:[],sil:[],movs:[],inv:{tab:'silos',cat:'Todas'},
+  enP:[],enL:[],enCache:null,en:{tab:'resumen',from:'',to:'',mes:'',punto:'Todos',tipo:'Todos',lect:'Todos'},
   imgs:new Map(),imgsAt:0,imgFor:null,imgConf:null,imgBusy:false,
   estq:[],dest:[],labs:[],ing:[],med:[],lEdit:null,lConf:false,lErr:'',stockEst:[],avisoNivel:false,nivelErr:{},
   cb:{tab:'cargas',per:'90',eq:'Todos',est:'',lista:'choferes'},mt:{tab:'intervenciones',per:'365',eq:'Todos',tipo:'Todos'},
@@ -538,6 +538,10 @@ const MOD_LOAD={
   inventario:async()=>{
     const [i,s,m]=await Promise.all([fetchAll('v_insumo_stock','*',['nombre']),fetchAll('v_silo_stock','*',['id_silo']),fetchAll('inv_movimientos','*',['fecha','id_mov'])]);
     S.ins=i;S.sil=s;S.movs=m;
+  },
+  energia:async()=>{
+    const [p,l]=await Promise.all([fetchAll('energia_puntos','*',['id_punto']),fetchAll('energia_lecturas','*',['periodo','id_punto'])]);
+    S.enP=p;S.enL=l;S.enCache=null;
   }
 };
 async function loadMod(m){
@@ -554,7 +558,7 @@ function clearData(){
   S.eq=new Map();S.docs=new Map();S.ops=new Map();S.plan=new Map();S.loaded=false;S.open=null;S.rec=null;S.opEdit=null;S.importIssues=[];
   S.comb=[];S.mant=[];S.fact=[];S.reb=[];S.control=[];S.leche=[];S.consumo=new Map();S.costo=new Map();
   S.estq=[];S.dest=[];S.labs=[];S.ing=[];S.med=[];S.stockEst=[];S.avisoNivel=false;S.nivelErr={};
-  S.ins=[];S.sil=[];S.movs=[];S.imgs=new Map();S.imgsAt=0;S.imgConf=null;
+  S.ins=[];S.sil=[];S.movs=[];S.imgs=new Map();S.imgsAt=0;S.imgConf=null;S.enP=[];S.enL=[];S.enCache=null;
   for(const m in S.mods) S.mods[m]={};
 }
 const isAuthErr=e=>e&&(e.code==='PGRST301'||e.code==='PGRST303'||/jwt/i.test(e.message||''));
@@ -605,14 +609,13 @@ function renderNav(){
 function render(){
   if(!S.user) return;
   renderNav();
-  const m=$('#main');
   if(S.mod==='maquinaria') renderMaquinaria();
   else if(S.mod==='combustible'){ensure('combustible','mantenciones');renderComb()}
   else if(S.mod==='mantenciones'){ensure('mantenciones','combustible');renderMant()}
   else if(S.mod==='rebano'){ensure('rebano');renderReb()}
   else if(S.mod==='leche'){ensure('leche');renderLeche()}
   else if(S.mod==='inventario'){ensure('inventario');renderInv()}
-  else {const [t,p]=PH[S.mod];m.innerHTML=`<div class="ph"><h2>${t}</h2><p>${p}</p></div>`}
+  else if(S.mod==='energia'){ensure('energia');renderEnergia()}
   renderDrawer();
 }
 
@@ -1324,7 +1327,7 @@ function lineChart(el,months,series,sel,M={u:'L',dec:0}){
   hit.addEventListener('pointermove',show);hit.addEventListener('pointerdown',show);
   hit.addEventListener('pointerleave',()=>{hov.innerHTML='';tip.hidden=true});
 }
-let rsz;window.addEventListener('resize',()=>{clearTimeout(rsz);rsz=setTimeout(()=>{if(S.user&&S.mod==='leche'&&!S.rec)render()},200)});
+let rsz;window.addEventListener('resize',()=>{clearTimeout(rsz);rsz=setTimeout(()=>{if(S.user&&(S.mod==='leche'||S.mod==='energia')&&!S.rec)render()},200)});
 
 /* ---------- ficha de equipo ---------- */
 function opt(list,val,blank=true){return (blank?'<option value="">—</option>':'')+list.map(v=>{const [k,l]=Array.isArray(v)?v:[v,v];return `<option value="${esc(k)}" ${val===k?'selected':''}>${esc(l)}</option>`}).join('')}
@@ -1530,6 +1533,209 @@ function renderMovs(){
     <td>${esc(r.proveedor||'')}</td><td>${esc(r.documento||'')}</td></tr>`}).join('')}
   </tbody></table>`}</div></div>`;
 }
+/* ================= Energía ================= */
+const EVENTOS_EN=['Normal','Vuelta de contador','Cambio de medidor'];
+const TIPOS_EN=['General','Casa trabajador','Casa no trabajador','Operación'];
+const ROLES_EN=['General','Submedidor','Independiente'];
+const ESTADOS_EN=['Activo','Sin consumo','Sin lectura'];
+const RE_EM=/^EM-[0-9]{2,}$/;
+const enMeses=(a,b)=>(+b.slice(0,4)-+a.slice(0,4))*12+(+b.slice(5,7)-+a.slice(5,7));
+const enSuma=(m,n)=>{const d=new Date(+m.slice(0,4),+m.slice(5,7)-1+n,1);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`};
+const enR2=v=>Math.round(v*100)/100;
+/* Consumo por punto y mes, y control del límite por casa. La primera lectura de un punto es solo la base. */
+function enCalc(){
+  if(S.enCache) return S.enCache;
+  const porPunto=new Map();
+  for(const l of S.enL) (porPunto.get(l.id_punto)||porPunto.set(l.id_punto,[]).get(l.id_punto)).push(l);
+  const cons=[], clave=new Map(), casas=new Map();
+  for(const p of S.enP){
+    let ant=null;
+    for(const l of (porPunto.get(p.id_punto)||[]).slice().sort((a,b)=>a.periodo.localeCompare(b.periodo))){
+      const m=l.periodo.slice(0,7), cambio=l.evento==='Cambio de medidor', lec=+l.lectura;
+      if(!ant&&!cambio){ant=l;continue}
+      const pa=ant?+ant.lectura:null, meses=cambio?1:enMeses(ant.periodo,l.periodo);
+      let kwh=cambio?lec:l.evento==='Vuelta de contador'?10**String(Math.floor(pa)).length-pa+lec:lec-pa;
+      const av=new Set(l.revisar?l.revisar.split('; '):[]);
+      if(kwh<0){kwh=null;av.add('Lectura menor que la anterior: ¿vuelta de contador o cambio de medidor?')}
+      if(cambio) av.add('Primer mes tras el cambio: consumo mínimo');
+      if(meses>1) av.add(`Abarca ${meses} meses`);
+      const c={m,p,l,ant:pa,meses,kwh:kwh==null?null:enR2(kwh),aviso:[...av].join('; ')};
+      cons.push(c);clave.set(m+'|'+p.id_punto,c);ant=l;
+      if(p.casa_usuario){
+        const k=m+'|'+p.casa_usuario, x=casas.get(k)||casas.set(k,{m,casa:p.casa_usuario,tipo:p.tipo,aplica:false,limite:0,kwh:0,meses:1,aviso:[]}).get(k);
+        x.kwh+=c.kwh||0;x.meses=Math.max(x.meses,meses);if(p.aplica_limite){x.aplica=true;x.limite=+p.limite_kwh}
+        if(c.aviso) x.aviso.push(c.aviso);
+      }
+    }
+  }
+  for(const x of casas.values()){x.kwh=enR2(x.kwh);x.lim=x.aplica?x.limite*x.meses:null;x.exc=x.aplica?Math.max(0,enR2(x.kwh-x.lim)):null}
+  return S.enCache={cons,clave,casas:[...casas.values()],meses:[...new Set(cons.map(c=>c.m))].sort()};
+}
+/* kWh por mes: una diferencia que abarca varios meses se reparte en partes iguales. */
+function enMensual(rows){
+  const t=new Map();
+  for(const c of rows){if(c.kwh==null)continue;for(let i=0;i<c.meses;i++){const m=enSuma(c.m,-i);t.set(m,(t.get(m)||0)+c.kwh/c.meses)}}
+  return t;
+}
+function renderEnergia(){
+  const st=S.mods.energia, ok=st.loaded, E=S.en, C=ok?enCalc():{cons:[],casas:[],meses:[]}, ms=C.meses;
+  if(ms.length){
+    if(!ms.includes(E.from)) E.from=ms[0];
+    if(!ms.includes(E.to)) E.to=ms[ms.length-1];
+    if(E.from>E.to) E.to=E.from;
+    if(!ms.includes(E.mes)||E.mes>E.to||E.mes<E.from) E.mes=E.to;
+  }
+  const rango=ms.filter(m=>m>=E.from&&m<=E.to);
+  const ctx={C,rango,cons:C.cons.filter(c=>c.m>=E.from&&c.m<=E.to),casas:C.casas.filter(x=>x.m>=E.from&&x.m<=E.to)};
+  const excMes=ctx.casas.filter(x=>x.m===E.to&&x.exc>0), L=v=>ok?v:'…';
+  const total=f=>[...enMensual(ctx.cons.filter(f)).entries()].filter(([m])=>m>=E.from&&m<=E.to).reduce((a,[,v])=>a+v,0);
+  $('#main').innerHTML=`
+  ${head('Energía','Consumo eléctrico por medidor y casa, y control del límite que cubre la empresa',`
+    <button class="btn" data-act="import" data-kind="energia" ${ok?'':'disabled'}>Importar Excel</button>
+    <button class="btn primary" data-act="rec-new" data-kind="enl" ${ok&&S.enP.length?'':'disabled'}>Nueva lectura</button>`)}
+  ${modBanners('energia')}
+  ${!ok?loadingBox(st.err?'No se pudieron cargar los datos de energía.':'Cargando energía…'):!S.enP.length?`<div class="card"><div class="empty"><strong>Aún no hay datos de energía</strong>Importa energia_normalizada_Fundo.xlsx con “Importar Excel”: trae los puntos y las lecturas.</div></div>`:`
+  <div class="panel">
+    <div class="period">
+      <div class="actions">
+        <button class="chip" data-act="en-preset" data-val="all" aria-pressed="${E.from===ms[0]&&E.to===ms[ms.length-1]}">Todo</button>
+        <button class="chip" data-act="en-preset" data-val="12">Últimos 12 meses</button>
+      </div>
+      <div class="actions" style="align-items:center;font-size:13px">
+        <span class="muted">Desde</span>${selSet('en.from','Desde',ms.map(m=>[m,fmtYm(m)]),E.from)}
+        <span class="muted">hasta</span>${selSet('en.to','Hasta',ms.map(m=>[m,fmtYm(m)]),E.to)}
+      </div>
+    </div>
+  </div>
+  <div class="summary s4">
+    ${stat(L(excMes.length),`Casas sobre el límite en ${fmtYm(E.to)}`,excMes.length?'warn':'')}
+    ${stat(L(fmt0(sum(excMes,'exc')))+'<small>kWh</small>',`Exceso de ${fmtYm(E.to)}`,excMes.length?'warn':'')}
+    ${stat(L(fmt0(sum(ctx.casas,'exc')))+'<small>kWh</small>','Exceso del período')}
+    ${stat(L(fmt0(total(c=>c.p.casa_usuario)))+'<small>kWh</small>','Consumo de casas del período')}
+  </div>
+  ${tabsHtml('en',[['resumen','Consumo'],['limite','Límite por casa'],['balance','Balance'],['puntos','Puntos',S.enP.length],['lecturas','Lecturas',S.enL.length]])}
+  <div id="pane"></div>`}`;
+  if(!ok||!S.enP.length) return;
+  ({resumen:enResumen,limite:enLimite,balance:enBalance,puntos:enPuntos,lecturas:enLecturas})[E.tab](ctx);
+}
+function enResumen(x){
+  const E=S.en, p=S.enP.find(v=>v.id_punto===E.punto), pts=mapa=>x.rango.map(m=>mapa.has(m)?enR2(mapa.get(m)):null);
+  const series=p?[{sala:'Consumo',pts:pts(enMensual(x.cons.filter(c=>c.p===p)))}]:[
+    {sala:'Casas',pts:pts(enMensual(x.cons.filter(c=>c.p.casa_usuario)))},
+    {sala:'Operación',pts:pts(enMensual(x.cons.filter(c=>c.p.tipo==='Operación')))},
+    {sala:'Medidores generales',pts:pts(enMensual(x.cons.filter(c=>c.p.tipo==='General')))}];
+  if(p&&p.aplica_limite) series.push({sala:'Límite',pts:x.rango.map(()=>+p.limite_kwh)});
+  const barras=rows=>{const mx=Math.max(...rows.map(r=>r.v),1);return rows.length?rows.map(r=>`<div class="hb" title="${esc(r.n)}: ${fmt0(r.v)} kWh"><span class="hb-l">${esc(r.n)}</span><span><span class="hb-b" style="width:${r.v/mx*100}%;background:var(${r.c})"></span></span><span class="hb-v">${fmt0(r.v)}</span></div>`).join(''):'<div class="muted">Sin exceso en el período.</div>'};
+  const porCasa=new Map();for(const c of x.casas) if(c.exc>0) porCasa.set(c.casa,(porCasa.get(c.casa)||0)+c.exc);
+  const topC=[...porCasa].map(([n,v])=>({n,v,c:'--s3'})).sort((a,b)=>b.v-a.v).slice(0,10);
+  const porP=new Map();for(const c of x.cons) if(c.p.tipo==='Operación'&&c.kwh) porP.set(c.p.punto,(porP.get(c.p.punto)||0)+c.kwh);
+  const topO=[...porP].map(([n,v])=>({n,v,c:'--s2'})).sort((a,b)=>b.v-a.v).slice(0,10);
+  $('#pane').innerHTML=`<div class="panel">
+    <div class="period" style="margin-bottom:8px"><h3 style="margin:0">Consumo mensual (kWh)</h3>
+      ${selSet('en.punto','Punto',[['Todos','Todo el fundo'],...S.enP.map(v=>[v.id_punto,v.punto])],E.punto)}</div>
+    <div class="legend">${series.map(s=>`<span><i class="sw" style="background:${salaColor(s.sala)}"></i>${esc(s.sala)}</span>`).join('')}</div>
+    <div class="chartwrap" id="en-chart"></div>
+    <p class="note">Los medidores generales incluyen lo que miden sus remarcadores: no se suman con las casas. Un período sin lectura se reparte en partes iguales entre sus meses.</p>
+  </div>
+  <div class="two">
+    <div class="panel"><h3>Casas con más exceso en el período (kWh)</h3><div class="hbars">${barras(topC)}</div></div>
+    <div class="panel"><h3>Mayor consumo de operación (kWh)</h3><div class="hbars">${barras(topO)}</div></div>
+  </div>`;
+  lineChart($('#en-chart'),x.rango,series,'Todos',{u:'kWh',dec:0,t:'Consumo mensual'});
+}
+function enLimite(x){
+  const E=S.en, mes=x.casas.filter(c=>c.m===E.mes&&c.aplica).sort((a,b)=>b.exc-a.exc||a.casa.localeCompare(b.casa));
+  const nombres=[...new Set(x.casas.filter(c=>c.aplica).map(c=>c.casa))].sort();
+  const idx=new Map(x.casas.map(c=>[c.m+'|'+c.casa,c]));
+  $('#pane').innerHTML=`<div class="filters"><span class="muted">Mes</span>${selSet('en.mes','Mes',x.rango.slice().reverse().map(m=>[m,fmtYm(m)]),E.mes)}</div>
+  <div class="card"><div class="tablewrap">${mes.length?`<table><thead><tr><th>Casa</th><th class="num">Consumo kWh</th><th class="num">Límite kWh</th><th class="num">Exceso kWh</th><th>Estado</th><th>Aviso</th></tr></thead><tbody>
+    ${mes.map(c=>`<tr><td>${esc(c.casa)}</td><td class="num">${fmtN(c.kwh)}</td><td class="num">${fmt0(c.lim)}${c.meses>1?` <span class="muted">(${c.meses} meses)</span>`:''}</td><td class="num">${c.exc>0?`<b class="bad">${fmtN(c.exc)}</b>`:'—'}</td>
+      <td><span class="pill ${c.exc>0?'p-bad':'p-ok'}">${c.exc>0?'Excedido':'Dentro'}</span></td><td class="muted clip" title="${esc(c.aviso.join(' · '))}">${esc(c.aviso.join(' · '))}</td></tr>`).join('')}
+  </tbody></table>`:'<div class="empty">No hay casas con límite y lectura este mes.</div>'}</div></div>
+  <div class="panel" style="margin-top:16px"><h3>Exceso por casa y mes (kWh)</h3><div class="tablewrap"><table><thead><tr><th>Casa</th>${x.rango.map(m=>`<th class="num">${MES[+m.slice(5,7)-1]} ${m.slice(2,4)}</th>`).join('')}<th class="num">Total</th></tr></thead><tbody>
+    ${nombres.map(n=>{const fila=x.rango.map(m=>idx.get(m+'|'+n));return `<tr><td style="white-space:nowrap">${esc(n)}</td>${fila.map(c=>c&&c.exc>0?`<td class="num" style="background:var(--bad-bg);color:var(--bad)">${fmt0(c.exc)}</td>`:`<td class="num muted">${c?'·':''}</td>`).join('')}<td class="num"><b>${fmt0(fila.reduce((a,c)=>a+(c?.exc||0),0))}</b></td></tr>`}).join('')}
+  </tbody></table></div><p class="note">Casas con límite. Punto = dentro del límite; vacío = sin lectura. Un exceso de varios meses aparece en el mes de la lectura. Solo se muestran casas con APLICA LÍMITE activo en Puntos.</p></div>`;
+}
+function enBalance(x){
+  const grupos=[...new Set(S.enP.filter(p=>p.rol_balance==='Submedidor').map(p=>p.grupo))].filter(Boolean).sort();
+  const filas=grupos.map(g=>{
+    const rs=x.cons.filter(c=>c.p.grupo===g&&c.kwh!=null);
+    const delRol=r=>{const t=new Map();for(const c of rs) if(c.p.rol_balance===r) t.set(c.m,(t.get(c.m)||0)+c.kwh);return t};
+    const G=delRol('General'), U=delRol('Submedidor'), meses=[...G.keys()].filter(m=>G.get(m)>0&&U.get(m)>0);
+    const gen=meses.reduce((a,m)=>a+G.get(m),0), sub=meses.reduce((a,m)=>a+U.get(m),0);
+    return {g,n:meses.length,gen,sub,pct:gen?sub/gen*100:null};
+  }).filter(f=>f.n);
+  $('#pane').innerHTML=`<div class="card"><div class="tablewrap"><table><thead><tr><th>Grupo</th><th class="num">Meses</th><th class="num">General kWh</th><th class="num">Remarcadores kWh</th><th class="num">Diferencia kWh</th><th class="num">Remarcadores / general</th><th>Estado</th></tr></thead><tbody>
+    ${filas.map(f=>{const bien=f.pct>=85&&f.pct<=115;return `<tr><td>${esc(f.g)}</td><td class="num">${f.n}</td><td class="num">${fmt0(f.gen)}</td><td class="num">${fmt0(f.sub)}</td><td class="num">${fmt0(f.gen-f.sub)}</td><td class="num">${fmt0(f.pct)} %</td><td><span class="pill ${bien?'p-ok':f.pct>115?'p-bad':'p-neu'}">${bien?'Cuadra':f.pct>115?'Remarcadores sobre el general':'Consumo sin remarcador'}</span></td></tr>`}).join('')}
+  </tbody></table></div></div><p class="note">Compara solo los meses en que hay consumo en el general y en sus remarcadores. Bajo 100 % puede ser consumo de operación sin remarcador; sobre 115 % apunta a un medidor mal leído o mal asociado.</p>`;
+}
+function enPuntos(){
+  const f=S.en.tipo, list=S.enP.filter(p=>f==='Todos'||p.tipo===f), ult=new Map();
+  for(const l of S.enL) ult.set(l.id_punto,l);
+  $('#pane').innerHTML=`<div class="filters">${['Todos',...TIPOS_EN].map(t=>`<button class="chip" data-set="en.tipo" data-val="${t}" aria-pressed="${f===t}">${t}</button>`).join('')}
+    <button class="btn" data-act="rec-new" data-kind="enp" style="margin-left:auto">Nuevo punto</button></div>
+  <div class="card"><div class="tablewrap"><table><thead><tr><th>ID</th><th>Punto</th><th>Tipo</th><th>Grupo</th><th>Centro</th><th>N° medidor</th><th>Remarcador</th><th class="num">Límite</th><th class="num">Última lectura</th><th>Estado</th></tr></thead><tbody>
+  ${list.map(p=>{const u=ult.get(p.id_punto);return `<tr data-rec="enp" data-key="${esc(p.id_punto)}" tabindex="0"><td class="id">${esc(p.id_punto)}</td><td>${esc(p.punto)}</td><td>${esc(p.tipo)}</td><td>${esc(p.grupo||'')}</td>
+    <td>${p.centro?esc(p.centro):'<span class="gap">Falta centro</span>'}</td><td>${esc(p.n_medidor||'')}</td><td>${esc(p.remarcador||'')}</td>
+    <td class="num">${p.aplica_limite?fmt0(p.limite_kwh)+' kWh':'—'}</td><td class="num" title="${u?fmtYm(u.periodo.slice(0,7)):''}">${u?fmtN(u.lectura):'—'}</td>
+    <td><span class="pill ${p.estado==='Activo'?'p-ok':p.estado==='Sin lectura'?'p-warn':'p-neu'}">${esc(p.estado)}</span></td></tr>`}).join('')}
+  </tbody></table></div></div>`;
+}
+function enLecturas(){
+  const f=S.en.lect, {clave}=enCalc(), nom=new Map(S.enP.map(p=>[p.id_punto,p.punto]));
+  const list=S.enL.filter(l=>f==='Todos'||l.id_punto===f).slice().sort((a,b)=>b.periodo.localeCompare(a.periodo)||byId(a.id_punto,b.id_punto));
+  $('#pane').innerHTML=`<div class="filters">${selSet('en.lect','Punto',[['Todos','Todos los puntos'],...S.enP.map(v=>[v.id_punto,v.id_punto+' · '+v.punto])],f)}</div>
+  <div class="card"><div class="tablewrap">${list.length?`<table><thead><tr><th>Mes</th><th>ID</th><th>Punto</th><th class="num">Lectura</th><th class="num">Planilla</th><th>Evento</th><th class="num">Consumo kWh</th><th>Aviso</th></tr></thead><tbody>
+  ${list.slice(0,120).map(l=>{const m=l.periodo.slice(0,7), c=clave.get(m+'|'+l.id_punto);return `<tr data-rec="enl" data-key="${esc(l.periodo+'|'+l.id_punto)}" tabindex="0"><td>${fmtYm(m)}</td><td class="id">${esc(l.id_punto)}</td><td>${esc(nom.get(l.id_punto)||'')}</td>
+    <td class="num">${fmtN(l.lectura)}</td><td class="num muted">${l.lectura_original!=null&&+l.lectura_original!==+l.lectura?fmtN(l.lectura_original):''}</td><td>${l.evento==='Normal'?'':`<span class="pill p-warn">${esc(l.evento)}</span>`}</td>
+    <td class="num">${c?(c.kwh==null?'<span class="bad">Revisar</span>':fmtN(c.kwh)):'<span class="muted">Base</span>'}</td><td class="muted clip" title="${esc(c?.aviso||'')}">${esc(c?.aviso||'')}</td></tr>`}).join('')}
+  </tbody></table>`:'<div class="empty">No hay lecturas.</div>'}</div></div>
+  ${list.length>120?'<p class="note">Se muestran las 120 lecturas más recientes. Elige un punto para ver toda su historia.</p>':''}`;
+}
+/* Lectura más reciente de un punto antes de un mes. */
+const enAnterior=(id,m)=>S.enL.filter(l=>l.id_punto===id&&(!m||l.periodo.slice(0,7)<m)).sort((a,b)=>b.periodo.localeCompare(a.periodo))[0]||null;
+/* Importa la base normalizada (hojas Puntos y Lecturas) o la plantilla mensual (solo Lecturas). */
+async function importarEnergia(wb){
+  const issues=[], src=sheetRows(wb,['puntos'])||[], lect=sheetRows(wb,['lecturas']);
+  if(!lect){toast('No encontré la hoja “Lecturas” en el archivo.');return}
+  const puntos=[], ids=new Set(S.enP.map(p=>p.id_punto));
+  src.forEach((r,i)=>{
+    const f=`Puntos fila ${i+2}`, id=r.id_punto&&String(r.id_punto).trim().toUpperCase();
+    if(!id) return;
+    if(!RE_EM.test(id)) return issues.push(`${f}: ID “${id}” no tiene el formato EM-01.`);
+    if(!r.punto) return issues.push(`${f}: ${id} sin nombre.`);
+    if(!TIPOS_EN.includes(r.tipo)) return issues.push(`${f}: tipo “${r.tipo??''}” no reconocido.`);
+    if(r.centro&&!CENTROS.includes(r.centro)) return issues.push(`${f}: centro “${r.centro}” no existe.`);
+    const txt=v=>v==null?null:String(v);
+    puntos.push({id_punto:id,punto:String(r.punto),casa_usuario:txt(r.casa_usuario),tipo:r.tipo,equipo:r.equipo||'Medidor',grupo:txt(r.grupo),rol_balance:ROLES_EN.includes(r.rol_balance)?r.rol_balance:'Independiente',centro:r.centro||null,
+      n_cliente:txt(r.n_cliente),n_casa:txt(r.n_casa),n_medidor:txt(r.n_medidor),remarcador:txt(r.remarcador),aplica_limite:r.aplica_limite==null?false:yes(r.aplica_limite),limite_kwh:nm(r.limite_kwh)??130,
+      estado:ESTADOS_EN.includes(r.estado)?r.estado:'Activo',pendiente:txt(r.pendiente)});
+    ids.add(id);
+  });
+  /* en la base normalizada, la hoja Consumos trae los avisos de la depuración */
+  const avisos=new Map();
+  for(const r of sheetRows(wb,['consumos'])||[]) if(r.revisar) avisos.set(toISO(r.periodo)+'|'+r.id_punto,String(r.revisar));
+  const filas=[];
+  lect.forEach((r,i)=>{
+    const f=`Lecturas fila ${i+2}`, id=r.id_punto&&String(r.id_punto).trim().toUpperCase(), lectura=nm(r.lectura);
+    if(!id||r.lectura==null) return;
+    const mes=(toISO(r.periodo)||ym(r.periodo)||'').slice(0,7);
+    if(!mes) return issues.push(`${f}: período no válido.`);
+    if(!ids.has(id)) return issues.push(`${f}: el punto ${id} no existe.`);
+    if(lectura==null||lectura<0) return issues.push(`${f} (${id}): lectura no válida.`);
+    const evento=r.evento||'Normal';
+    if(!EVENTOS_EN.includes(evento)) return issues.push(`${f} (${id}): evento “${evento}” no reconocido.`);
+    const periodo=mes+'-01';
+    filas.push({periodo,id_punto:id,lectura,lectura_original:nm(r.lectura_original),evento,observacion:r.observacion==null?null:String(r.observacion),revisar:avisos.get(periodo+'|'+id)||null});
+  });
+  S.importKind='energia';S.importIssues=issues;
+  if(!puntos.length&&!filas.length){render();toast('No encontré filas válidas para importar.');return}
+  toast(`Importando ${fmt0(filas.length)} lecturas…`);
+  try{await upsert('energia_puntos',puntos,'id_punto');await upsert('energia_lecturas',dedupe(filas,r=>r.periodo+'|'+r.id_punto),'periodo,id_punto')}
+  catch(e){toast(errMsg(e));await loadMod('energia');return}
+  toast(`${puntos.length?fmt0(puntos.length)+' puntos · ':''}${fmt0(filas.length)} lecturas importadas${issues.length?` · ${issues.length} omitidas`:''}`);
+  await loadMod('energia');
+}
 /* Stock del lugar del movimiento (silo o bodega); null si el silo aún no tiene medición. */
 function stockLugar(r){
   if(r.id_silo) return S.sil.find(s=>s.id_silo===r.id_silo)?.stock_kg??null;
@@ -1539,6 +1745,80 @@ function stockLugar(r){
 
 /* ---------- formularios de registros (combustible, mantenciones, rebaño, leche, inventario) ---------- */
 const REC={
+  enp:{
+    title:(r,n)=>n?'Nuevo punto':r.punto,
+    sub:(r,n)=>n?'Energía':r.id_punto,
+    body(r,n){
+      return `<fieldset><legend>Punto</legend>
+        ${fld('r-id','ID',r.id_punto,{need:true,ro:!n})}
+        ${fld('r-punto','Nombre',r.punto,{need:true})}
+        ${fld('r-tipo','Tipo',null,{list:opt(TIPOS_EN,r.tipo||'Casa trabajador',false)})}
+        ${fld('r-equipo','Equipo',null,{list:opt(['Medidor','Remarcador'],r.equipo||'Remarcador',false)})}
+        ${fld('r-casa','Casa o usuario',r.casa_usuario,{ph:'Dos remarcadores de una casa llevan el mismo nombre'})}
+        ${fld('r-centro','Centro',null,{list:opt(CENTROS,r.centro)})}
+        ${fld('r-grupo','Grupo de balance',r.grupo)}
+        ${fld('r-rol','Rol en el balance',null,{list:opt(ROLES_EN,r.rol_balance||'Independiente',false)})}
+        ${fld('r-estado','Estado',null,{list:opt(ESTADOS_EN,r.estado||'Activo',false)})}
+      </fieldset>
+      <fieldset><legend>Límite</legend>
+        ${fld('r-aplica','Aplica límite',null,{list:opt(['Sí','No'],r.aplica_limite?'Sí':'No',false)})}
+        ${fld('r-lim','Límite kWh/mes',r.limite_kwh??130,{type:'number'})}
+      </fieldset>
+      <fieldset><legend>Identificación</legend>
+        ${fld('r-cli','N° cliente',r.n_cliente)}${fld('r-ncasa','N° casa',r.n_casa)}
+        ${fld('r-med','N° medidor',r.n_medidor)}${fld('r-rem','Remarcador',r.remarcador)}
+        ${fld('r-pend','Pendiente',r.pendiente,{type:'area',wide:true})}
+      </fieldset>`;
+    },
+    read:()=>({id_punto:(val('r-id')||'').toUpperCase(),punto:val('r-punto'),tipo:val('r-tipo'),equipo:val('r-equipo'),casa_usuario:val('r-casa'),centro:val('r-centro'),grupo:val('r-grupo'),rol_balance:val('r-rol'),estado:val('r-estado'),
+      aplica_limite:val('r-aplica')==='Sí',limite_kwh:numv('r-lim',1)??130,n_cliente:val('r-cli'),n_casa:val('r-ncasa'),n_medidor:val('r-med'),remarcador:val('r-rem'),pendiente:val('r-pend')}),
+    check(r,n){
+      if(!RE_EM.test(r.id_punto)) return 'Escribe un ID con el formato EM-63.';
+      if(n&&S.enP.some(p=>p.id_punto===r.id_punto)) return `Ya existe el punto ${r.id_punto}.`;
+      if(!r.punto) return 'Escribe el nombre del punto.';
+      if(r.aplica_limite&&!r.casa_usuario) return 'Para aplicar el límite, indica la casa o usuario.';
+    },
+    warn:()=>'',
+    async save(r,n,key){if(n) await must(sb.from('energia_puntos').insert(r)); else await must(sb.from('energia_puntos').update(r).eq('id_punto',key))},
+    async del(key){
+      if(S.enL.some(l=>l.id_punto===key)) throw {aviso:'Este punto tiene lecturas, así que no se puede eliminar. Cambia su estado.'};
+      await must(sb.from('energia_puntos').delete().eq('id_punto',key));
+    },
+    done:'Punto guardado',after:['energia']
+  },
+  enl:{
+    title:(r,n)=>n?'Nueva lectura':S.enP.find(p=>p.id_punto===r.id_punto)?.punto||r.id_punto,
+    sub:(r,n)=>n?'Energía':r.id_punto+' · '+fmtYm(r.periodo.slice(0,7)),
+    body(r,n){
+      const prev=enAnterior(r.id_punto,(r.periodo||'').slice(0,7));
+      return `<fieldset><legend>Lectura</legend>
+        ${fld('r-mes','Mes',(r.periodo||'').slice(0,7),{type:'month',need:true,ro:!n})}
+        ${fld('r-punto','Punto',null,{list:opt(S.enP.map(p=>[p.id_punto,p.id_punto+' · '+p.punto]),r.id_punto),ro:!n})}
+        ${fld('r-lec','Lectura del medidor',r.lectura,{type:'number',need:true})}
+        ${fld('r-ev','Evento',null,{list:opt(EVENTOS_EN,r.evento||'Normal',false)})}
+        ${fld('r-obs','Observación',r.observacion,{type:'area',wide:true})}
+      </fieldset>
+      <p class="note" style="margin:0">${prev?`Lectura anterior: ${fmtN(prev.lectura)} (${fmtYm(prev.periodo.slice(0,7))}). `:''}Escribe el número que marca el medidor; el consumo se calcula solo.</p>`;
+    },
+    read:()=>({periodo:val('r-mes')?val('r-mes')+'-01':null,id_punto:val('r-punto'),lectura:numv('r-lec',2),evento:val('r-ev'),observacion:val('r-obs')}),
+    check(r,n){
+      if(!r.periodo) return 'Indica el mes de la lectura.';
+      if(!r.id_punto) return 'Elige el punto.';
+      if(r.lectura==null||r.lectura<0) return 'Escribe la lectura del medidor.';
+      if(n&&S.enL.some(l=>l.periodo===r.periodo&&l.id_punto===r.id_punto)) return 'Ya hay una lectura de ese punto en ese mes. Ábrela desde Lecturas para corregirla.';
+    },
+    warn(r){
+      const p=enAnterior(r.id_punto,r.periodo.slice(0,7));
+      return p&&r.evento==='Normal'&&r.lectura<+p.lectura?`La lectura es menor que la anterior (${fmtN(p.lectura)}). Si el medidor dio la vuelta o se cambió, elige ese evento.`:'';
+    },
+    async save(r,n,key){
+      if(n){await must(sb.from('energia_lecturas').insert(r));return}
+      const [p,id]=key.split('|');
+      await must(sb.from('energia_lecturas').update({lectura:r.lectura,evento:r.evento,observacion:r.observacion}).eq('periodo',p).eq('id_punto',id));
+    },
+    async del(key){const [p,id]=key.split('|');await must(sb.from('energia_lecturas').delete().eq('periodo',p).eq('id_punto',id))},
+    done:'Lectura guardada',after:['energia']
+  },
   ins:{
     title:(r,n)=>n?'Nuevo insumo':r.nombre,
     sub:(r,n)=>n?'Inventario':r.id_insumo,
@@ -2106,6 +2386,8 @@ function openRec(kind,key){
   else if(kind==='ins') data={...S.ins.find(i=>i.id_insumo===key)};
   else if(kind==='sil') data={...S.sil.find(s=>s.id_silo===key)};
   else if(kind==='mov') data={...S.movs.find(m=>m.id_mov===key)};
+  else if(kind==='enp') data={...S.enP.find(p=>p.id_punto===key)};
+  else if(kind==='enl'){const [p,id]=key.split('|');data={...S.enL.find(l=>l.periodo===p&&l.id_punto===id)}}
   S.rec={kind,key,isNew:false,data};S.formErr='';S.warn='';S.warnAck=false;S.confirmDel=false;renderDrawer();
 }
 function newRec(kind,extra={}){
@@ -2117,7 +2399,9 @@ function newRec(kind,extra={}){
     reb:{fecha:hoy(),centro:S.rb.centro!=='Todos'?S.rb.centro:null,lote:'',counts:{}},
     leche:{fecha:hoy(),sala:S.lc.sala!=='Todos'?S.lc.sala:null},
     fact:{id_maquina:S.mt.eq!=='Todos'?S.mt.eq:null,tipo_documento:'Factura electrónica',vinculo:'nueva',mtipo:'Correctiva',cargo:'rep'},
-    ins:{},sil:{},mov:{fecha:hoy(),tipo:'Compra',id_silo:null}}[kind];
+    ins:{},sil:{},mov:{fecha:hoy(),tipo:'Compra',id_silo:null},
+    enp:{id_punto:nextIdGen('EM',S.enP.map(p=>p.id_punto))().replace(/-0+(\d{2,})$/,'-$1')},
+    enl:{periodo:S.enL.length?enSuma(S.enL.map(l=>l.periodo.slice(0,7)).sort().pop(),1)+'-01':hoy().slice(0,7)+'-01',id_punto:S.en.lect!=='Todos'?S.en.lect:null}}[kind];
   S.rec={kind,key:null,isNew:true,data:{...d,...extra}};S.formErr='';S.warn='';S.warnAck=false;S.confirmDel=false;renderDrawer();
 }
 function closeRec(){S.rec=null;S.formErr='';S.warn='';S.warnAck=false;S.confirmDel=false;renderDrawer()}
@@ -2196,6 +2480,7 @@ async function importReg(kind,file){
   if(typeof XLSX==='undefined'){toast('No se pudo cargar el lector de Excel. Recarga la página.');return}
   let wb;try{wb=XLSX.read(await file.arrayBuffer())}catch(e){toast('El archivo no se pudo leer como Excel.');return}
   const issues=[];let rows=[],table,conflict;
+  if(kind==='energia'){await importarEnergia(wb);return}
   if(kind==='combustible'&&wb.SheetNames.some(n=>key(n)==='base_datos')){await importarBasePetroleo(wb);return}
   if(kind==='combustible'){
     const src=sheetRows(wb,['cargas','combustible']);
@@ -2435,6 +2720,11 @@ document.addEventListener('click',ev=>{
   else if(a==='lista-activo'){accionLista('activo')}
   else if(a==='lista-del'){S.lConf=true;render()}
   else if(a==='lista-del-si'){accionLista('borrar')}
+  else if(a==='en-preset'){
+    const ms=enCalc().meses;
+    S.en.to=ms[ms.length-1];S.en.from=t.dataset.val==='12'?ms[Math.max(0,ms.length-12)]:ms[0];
+    render();
+  }
   else if(a==='lc-preset'){
     const ms=[...new Set(S.leche.map(r=>r.fecha.slice(0,7)))].sort(),v=t.dataset.val;
     if(v==='all'){S.lc.from=ms[0];S.lc.to=ms[ms.length-1]}
