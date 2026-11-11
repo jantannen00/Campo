@@ -3,6 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<!-- Política de contenido: la página solo ejecuta código propio y de las dos CDN indicadas, y solo se conecta a la base de datos del fundo.
+     Si se agrega una librería o un servicio nuevo, hay que sumar su dominio aquí o el navegador lo bloqueará. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' blob: https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; worker-src 'self' blob: https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob: https://ryelugkgjcxxxebinctw.supabase.co; connect-src 'self' https://ryelugkgjcxxxebinctw.supabase.co wss://ryelugkgjcxxxebinctw.supabase.co; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta name="referrer" content="strict-origin">
 <title>Torre de Control Agrícola</title>
 <link rel="icon" type="image/jpeg" id="fav">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -250,7 +254,14 @@ textarea.field{min-height:72px;resize:vertical;font:inherit;font-size:13.5px}
   .grid3{grid-template-columns:1fr 1fr}
   .opform{grid-template-columns:1fr 1fr}
 }
-@media (prefers-reduced-motion:no-preference){.drawer{animation:slide .18s ease-out}@keyframes slide{from{transform:translateX(24px);opacity:.6}}}
+@media (prefers-reduced-motion:no-preference){.drawer.entra{animation:slide .18s ease-out}@keyframes slide{from{transform:translateX(24px);opacity:.6}}}
+.fresco{font-size:11.5px;font-weight:500;padding:1px 8px;border-radius:999px;white-space:nowrap;background:var(--ok-bg);color:var(--ok)}
+.fresco.viejo{background:var(--warn-bg);color:var(--warn)}
+.alerta.ok{background:var(--ok-bg);color:var(--ok);cursor:default}
+.modhead>div{min-width:0;flex:1}
+.modcard .cuando{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px}
+.inibar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+.inibar .muted{font-size:12px}
 </style>
 </head>
 <body>
@@ -283,9 +294,11 @@ textarea.field{min-height:72px;resize:vertical;font:inherit;font-size:13.5px}
 <input type="file" id="xls" accept=".xlsx,.xls" hidden>
 <input type="file" id="imgs" accept="image/jpeg,image/png,image/webp" multiple hidden>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<!-- integrity: el navegador comprueba la huella de cada librería y no la ejecuta si la CDN entrega un archivo distinto.
+     Al cambiar de versión hay que cambiar también la huella (sha384 del archivo). -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.js" integrity="sha384-rwykjmWNwVxboyFmvK9OXN0wj9hnMHA2aAHtits54DuACyCq0M2PrSNxhRb+hvXT" crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" integrity="sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw" crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" integrity="sha384-/1qUCSGwTur9vjf/z9lmu/eCUYbpOTgSjmpbMQZ1/CtX2v/WcAIKqRv+U1DUCG6e" crossorigin="anonymous"></script>
 <script>
 /* Conexión. La clave publicable puede ir en el navegador: lo que cada usuario puede leer o escribir lo deciden las reglas RLS. */
 const SUPABASE_URL='https://ryelugkgjcxxxebinctw.supabase.co';
@@ -354,7 +367,10 @@ const S={mod:'inicio',tab:'equipos',q:'',tipo:'Todos',centro:'Todos',docf:'Pendi
   estq:[],dest:[],labs:[],ing:[],med:[],lEdit:null,lConf:false,lErr:'',stockEst:[],avisoNivel:false,nivelErr:{},
   cb:{tab:'cargas',per:'90',eq:'Todos',est:'',lista:'choferes'},mt:{tab:'intervenciones',per:'365',eq:'Todos',tipo:'Todos'},
   rb:{tab:'ultimo',centro:'Todos'},lc:{sala:'Todos',from:'',to:'',met:'litros'},
-  open:null,rec:null,confirmDel:false,formErr:'',warn:'',warnAck:false,opEdit:null,saving:false,importIssues:[],importKind:null};
+  open:null,rec:null,confirmDel:false,formErr:'',warn:'',warnAck:false,opEdit:null,saving:false,importIssues:[],importKind:null,
+  ini:{centro:'Todos'},imp:null,dirty:false,openVer:null,loadAgain:false,msgVisto:''};
+/* Preferencias de esta persona en este equipo (no son datos del fundo): el campo que mira en Inicio. */
+const pref={get(k){try{return localStorage.getItem('tca.'+k)}catch(e){return null}},set(k,v){try{localStorage.setItem('tca.'+k,v)}catch(e){}}};
 
 const $=s=>document.querySelector(s);
 $('#fav').href=$('.lmark').src;   // el ícono de la pestaña usa el mismo emblema del menú
@@ -374,7 +390,6 @@ const cutoff=per=>{if(per==='all')return '';const d=new Date();d.setDate(d.getDa
 const sum=(rows,f)=>rows.reduce((a,r)=>a+(r[f]==null?0:+r[f]),0);
 const mean=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:null;
 const byId=(a,b)=>String(a).localeCompare(String(b),undefined,{numeric:true});
-const today=new Date();
 
 function toast(t){const el=$('#toast');el.textContent=t;el.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>el.hidden=true,4200)}
 
@@ -385,7 +400,7 @@ function docState(d){
   if(s==='Con fecha'&&d.vencimiento){
     const [y,m]=d.vencimiento.split('-').map(Number);
     const end=new Date(y,m,0,23,59);
-    const days=(end-today)/864e5;
+    const days=(end-new Date())/864e5;   // la fecha de hoy se lee cada vez: la página puede quedar abierta varios días
     return days<0?'Vencido':days<=60?'Por vencer':'Vigente';
   }
   if(s==='Vencido sin fecha exacta') return 'Vencido';
@@ -461,23 +476,29 @@ async function logout(){await sb.auth.signOut();toast('Sesión cerrada')}
 
 /* ---------- datos ---------- */
 /* Supabase entrega como máximo 1.000 filas por consulta: se pide por páginas. */
+/* La primera página trae el total; las demás se piden a la vez (Leche son 9 páginas: antes iban una tras otra). */
 async function fetchAll(table,select,order){
-  const out=[],step=1000;
-  for(let from=0;;from+=step){
-    let q=sb.from(table).select(select).range(from,from+step-1);
-    for(const o of order) q=q.order(o,{ascending:true});
-    const {data,error}=await q;
-    if(error) throw error;
-    out.push(...data);
-    if(data.length<step) break;
+  const step=1000;
+  const pagina=(from,contar)=>{let q=sb.from(table).select(select,contar?{count:'exact'}:undefined).range(from,from+step-1);for(const o of order)q=q.order(o,{ascending:true});return q};
+  const p0=await pagina(0,true);
+  if(p0.error) throw p0.error;
+  const out=p0.data;
+  if(out.length<step) return out;
+  if(p0.count==null){
+    for(let from=step;;from+=step){const {data,error}=await pagina(from);if(error)throw error;out.push(...data);if(data.length<step)break}
+    return out;
   }
+  const resto=await Promise.all(Array.from({length:Math.max(0,Math.ceil(p0.count/step)-1)},(_,i)=>pagina((i+1)*step)));
+  for(const r of resto){if(r.error)throw r.error;out.push(...r.data)}
   return out;
 }
 async function load(){
-  if(S.loading) return;
+  /* si llega otra petición mientras carga (p. ej. justo después de guardar), se repite al terminar para no quedar con datos viejos */
+  if(S.loading){S.loadAgain=true;return}
   S.loading=true;
+  const uid=S.user?.id;
   const [eq,dc,op,tp,pm,stk,sil,ins]=await Promise.all([
-    sb.from('equipos').select(EQ_COLS.join(',')),
+    sb.from('equipos').select(EQ_COLS.join(',')+',actualizado_en'),
     sb.from('documentos').select('id_maquina,documento,vencimiento,situacion,texto_original'),
     sb.from('operadores').select('id_operador,nombre,centro,activo'),
     sb.from('tipos_equipo').select('tipo,usa_horometro'),
@@ -487,6 +508,8 @@ async function load(){
     sb.from('v_insumo_stock').select('*').order('nombre')
   ]);
   S.loading=false;
+  if(uid!==S.user?.id) return;                 // cambió la sesión mientras cargaba: estos datos ya no corresponden
+  if(S.loadAgain){S.loadAgain=false;return load()}
   const bad=[eq,dc,op,tp,pm,stk].find(r=>r.error);
   if(bad){S.loadErr=errMsg(bad.error);if(isAuthErr(bad.error)){await sb.auth.signOut();return}render();return}
   S.loadErr='';S.loaded=true;S.loadedAt=Date.now();
@@ -502,6 +525,18 @@ async function load(){
   if(!sil.error) S.sil=sil.data;
   if(!ins.error) S.ins=ins.data;
   render();
+  /* Rol y campos de la persona (existe después de aplicar la migración de roles; antes de eso la consulta falla y no pasa nada).
+     Un administrador con un solo campo entra viendo ese campo. Los permisos los hace cumplir la base, no la página. */
+  if(!S.perfil){
+    S.perfil={};
+    sb.rpc('mi_perfil').then(({data})=>{
+      if(!data||!data.rol||uid!==S.user?.id) return;
+      S.perfil=data;
+      const cs=(data.centros||[]).filter(c=>SALAS.includes(c));
+      if(data.rol==='admin_campo'&&cs.length===1&&!pref.get('centro')){S.ini.centro=cs[0];S.lc.sala=cs[0];S.rb.centro=cs[0];S.centro=cs[0]}
+      render();
+    },()=>{});
+  }
   if(Date.now()-S.imgsAt>IMG_HORAS*36e5) cargarImagenes();
   /* aviso al entrar, una vez por sesión; después queda la marca en el menú y el aviso en el módulo */
   const bajos=[...estanquesBajos().map(v=>`${v.nombre} con ${fmt0(v.stock_calculado)} L`),...silosBajos().map(v=>`${v.nombre} con ${fmt0(v.stock_kg)} kg`),...insumosBajos().map(i=>`${i.nombre} con ${fmtN(stockInsumo(i))} ${i.unidad}`)];
@@ -579,7 +614,7 @@ const MOD_LOAD={
     const [r,c]=await Promise.all([fetchAll('rebano','*',['fecha','centro','lote','estado']),fetchAll('v_rebano_vs_leche','*',['fecha','centro'])]);
     S.reb=r;S.control=c;
   },
-  leche:async()=>{S.leche=await fetchAll('leche',['fecha','sala',...LECHE_NUM,...LECHE_TXT].join(','),['fecha','sala'])},
+  leche:async()=>{S.leche=await fetchAll('leche',['fecha','sala',...LECHE_NUM,...LECHE_TXT,'actualizado_en'].join(','),['fecha','sala'])},
   inventario:async()=>{
     const [i,s,m]=await Promise.all([fetchAll('v_insumo_stock','*',['nombre']),fetchAll('v_silo_stock','*',['id_silo']),fetchAll('inv_movimientos','*',['fecha','id_mov'])]);
     S.ins=i;S.sil=s;S.movs=m;
@@ -591,16 +626,20 @@ const MOD_LOAD={
 };
 async function loadMod(m){
   const st=S.mods[m];
-  if(st.loading) return;
+  if(st.loading){st.again=true;return}
   st.loading=true;st.err='';
   try{await MOD_LOAD[m]();st.loaded=true;st.at=Date.now()}
   catch(e){st.err=errMsg(e);if(isAuthErr(e)){st.loading=false;await sb.auth.signOut();return}}
-  st.loading=false;render();
+  st.loading=false;
+  if(S.mods[m]!==st) return;                   // se cerró la sesión mientras cargaba
+  if(st.again){st.again=false;return loadMod(m)}
+  render();
 }
 const ensure=(...ms)=>{for(const m of ms){const st=S.mods[m];if(!st.loaded&&!st.loading&&!st.err)loadMod(m)}};
 const ready=(...ms)=>S.loaded&&ms.every(m=>S.mods[m].loaded);
 function clearData(){
   S.eq=new Map();S.docs=new Map();S.ops=new Map();S.plan=new Map();S.loaded=false;S.open=null;S.rec=null;S.opEdit=null;S.importIssues=[];
+  S.imp=null;S.dirty=false;S.saving=false;S.loadAgain=false;S.refrescando=false;S.perfil=null;$('#layer').innerHTML='';
   S.comb=[];S.mant=[];S.fact=[];S.reb=[];S.control=[];S.leche=[];S.consumo=new Map();S.costo=new Map();
   S.estq=[];S.dest=[];S.labs=[];S.ing=[];S.med=[];S.stockEst=[];S.avisoNivel=false;S.nivelErr={};
   S.ins=[];S.sil=[];S.movs=[];S.imgs=new Map();S.imgsAt=0;S.imgConf=null;S.enP=[];S.enL=[];S.enCache=null;
@@ -617,7 +656,40 @@ async function upsert(table,rows,onConflict){
     if(error) throw error;
   }
 }
+/* Importar en dos pasos: primero se muestra qué se va a escribir y cuánto reemplaza a lo que ya existe; nada se guarda hasta confirmar. */
+const parte=(n,nombre,ex)=>`${fmt0(n)} ${nombre}: ${fmt0(n-ex)} ${n-ex===1?'nuevo':'nuevos'} y ${fmt0(ex)} que ya ${ex===1?'existe':'existen'}`;
+function proponerImport(kind,partes,pasos,issues,pisa,despues){
+  S.importKind=kind;S.importIssues=issues;
+  S.imp={kind,partes:partes.filter(Boolean),pasos:pasos.filter(p=>p.rows.length),pisa,despues,busy:false};
+  render();window.scrollTo(0,0);
+}
+async function ejecutarImport(){
+  const I=S.imp;
+  if(!I||I.busy) return;
+  I.busy=true;render();
+  let err=null;
+  try{for(const p of I.pasos) await upsert(p.table,p.rows,p.conflict)}catch(e){err=e}
+  S.imp=null;
+  toast(err?'La importación se detuvo a medio camino: '+errMsg(err)+' Puedes repetirla: no duplica filas.':`Importación lista: ${I.partes.join(' · ')}${S.importIssues.length?` · ${S.importIssues.length} filas omitidas`:''}`);
+  await I.despues();
+  render();
+}
 const must=async q=>{const {error}=await q;if(error)throw error};
+/* Editar o borrar y confirmar que la base lo hizo: una fila que ya no existe, o un permiso que falta, no devuelven error y pasarían como "guardado". */
+async function filas(q){
+  const {data,error}=await q.select();
+  if(error) throw error;
+  if(!data||!data.length) throw {aviso:'El registro ya no existe o no tienes permiso para cambiarlo. Cierra la ficha y revisa los datos actuales.'};
+  return data;
+}
+/* Antes de guardar una edición: si otra persona cambió o borró el registro mientras estaba abierto, no se pisa su cambio. */
+async function sinCambios(tabla,donde,antes){
+  if(!antes) return;
+  const {data,error}=await sb.from(tabla).select('actualizado_en').match(donde).limit(1);
+  if(error) throw error;
+  if(!data.length) throw {aviso:'Otra persona eliminó este registro mientras lo tenías abierto. Cierra la ficha para ver los datos actuales.'};
+  if(data[0].actualizado_en!==antes) throw {aviso:'Otra persona modificó este registro mientras lo tenías abierto. Cierra la ficha y vuelve a abrirla para ver sus cambios antes de guardar los tuyos.'};
+}
 function errMsg(e){
   if(!e) return 'No se pudo guardar. Inténtalo de nuevo.';
   if(e.aviso) return e.aviso;
@@ -639,6 +711,9 @@ function modBanners(...ms){
   let h='';
   if(S.loadErr) h+=`<div class="banner err">${esc(S.loadErr)} <button class="btn" data-act="reload">Reintentar</button></div>`;
   for(const m of ms){const e=S.mods[m].err;if(e)h+=`<div class="banner err">${esc(e)} <button class="btn" data-act="reload-mod" data-kind="${m}">Reintentar</button></div>`}
+  if(S.imp&&S.imp.kind===S.mod) h+=`<div class="banner" role="alert"><div><b>${S.imp.busy?'Importando…':'Revisa antes de importar: todavía no se ha guardado nada'}</b><ul>${S.imp.partes.map(p=>`<li>${esc(p)}</li>`).join('')}</ul>
+    ${S.imp.pisa?`<div>Los registros que ya existen quedarán con los valores del Excel. Si corregiste alguno en la página, esa corrección se reemplaza (la versión anterior queda en el historial de cambios).</div>`:''}</div>
+    <div class="actions"><button class="btn primary" data-act="imp-ok" ${S.imp.busy?'disabled':''}>${S.imp.busy?'Importando…':'Importar'}</button><button class="btn ghost" data-act="imp-no" ${S.imp.busy?'disabled':''}>Cancelar</button></div></div>`;
   if(S.importIssues.length&&S.importKind===S.mod) h+=`<div class="banner"><div><b>Filas que no se importaron (${S.importIssues.length})</b><ul>${S.importIssues.slice(0,8).map(i=>`<li>${esc(i)}</li>`).join('')}${S.importIssues.length>8?`<li>y ${S.importIssues.length-8} más</li>`:''}</ul></div><button class="btn ghost" data-act="issues-close">Cerrar</button></div>`;
   return h;
 }
@@ -649,7 +724,9 @@ const loadingBox=t=>`<div class="card"><div class="empty">${t}</div></div>`;
 function renderNav(){
   $('#nav').innerHTML=MODS.map(m=>m.grp?`<div class="navgrp">${m.grp}</div>`:m.href?`<a href="${m.href}">${m.label}</a>`:
     `<button data-mod="${m.id}" ${S.mod===m.id?'aria-current="page"':''}>${m.label}${m.soon?'<span class="soon">pronto</span>':''}${(m.id==='combustible'&&estanquesBajos().length)||(m.id==='inventario'&&silosBajos().length+insumosBajos().length)?'<span class="navalerta">Nivel bajo</span>':''}</button>`).join('');
-  $('#sidefoot').innerHTML=`<span class="who" title="${esc(S.user?.email)}">${esc(S.user?.email||'')}</span><button class="linkbtn" data-act="logout">Cerrar sesión</button>`;
+  const rol={dueno:'Dueño',admin_campo:'Administrador de campo',maquinaria:'Encargado de maquinaria',lector:'Solo lectura'}[S.perfil?.rol]||'';
+  const campos=S.perfil?.rol==='admin_campo'?(S.perfil.centros||[]).join(', '):'';
+  $('#sidefoot').innerHTML=`<span class="who" title="${esc(S.user?.email)}">${esc(S.user?.email||'')}</span>${rol?`<span class="who" title="${esc(campos)}">${esc(rol+(campos?' · '+campos:''))}</span>`:''}<button class="linkbtn" data-act="logout">Cerrar sesión</button>`;
 }
 function render(){
   if(!S.user) return;
@@ -662,7 +739,9 @@ function render(){
   else if(S.mod==='leche'){ensure('leche');renderLeche()}
   else if(S.mod==='inventario'){ensure('inventario');renderInv()}
   else if(S.mod==='energia'){ensure('energia');renderEnergia()}
-  renderDrawer();
+  document.title=(S.mod==='inicio'?'':(MODS.find(m=>m.id===S.mod)?.label||'')+' · ')+'Torre de Control Agrícola';
+  /* una ficha con cambios sin guardar no se vuelve a dibujar por una actualización de fondo: se perdería lo escrito */
+  if(!S.dirty||(!S.open&&!S.rec)) renderDrawer();
 }
 
 /* ================= Inicio =================
@@ -714,39 +793,71 @@ const barrasH=rows=>{const mx=Math.max(...rows.map(r=>r.v),1);return `<div class
 const REB_COLOR={'En ordeña':'var(--s1)','Seca':'var(--s2)','Vaquilla':'var(--s4)','Ternera':'var(--s5)','Toro':'var(--s3)','Otro':'var(--neu)'};
 const ST={ok:'var(--ok)',warn:'var(--warn)',bad:'var(--bad)',neu:'var(--neu)'};
 const pl=(n,uno,varios)=>`${n} ${n===1?uno:varios}`;
+/* Antigüedad del último dato de un módulo. Un tablero con datos viejos engaña: cada tarjeta dice hasta cuándo llegan los suyos. */
+function antiguedad(fecha,limite){
+  if(!fecha) return null;
+  const f=fecha.length===7?fecha+'-28':fecha;   // un mes (AAAA-MM) cuenta hasta su día 28
+  const d=Math.round((new Date(hoy()+'T00:00')-new Date(f+'T00:00'))/864e5);
+  const txt=d<=0?'hoy':d===1?'ayer':d<60?`hace ${d} días`:d<730?`hace ${Math.round(d/30.4)} meses`:`hace ${Math.floor(d/365)} años`;
+  return {d,viejo:d>limite,txt,html:`<span class="fresco ${d>limite?'viejo':''}" title="Último dato: ${esc(fecha)}">${d<=0?'Al día':'Datos de '+txt}</span>`};
+}
+/* Salas donde la leche diaria bajó 8 % o más entre la semana anterior y la última semana con datos. */
+function caidasLeche(rows){
+  const out=[];
+  for(const s of SALAS){
+    const d=byDay(rows.filter(r=>r.sala===s)).filter(x=>x.hasL).sort((a,b)=>a.fecha.localeCompare(b.fecha));
+    if(d.length<14) continue;
+    const a=mean(d.slice(-14,-7).map(x=>x.lt)), b=mean(d.slice(-7).map(x=>x.lt));
+    if(a>0&&(a-b)/a>=0.08) out.push({s,p:Math.round((a-b)/a*100)});
+  }
+  return out;
+}
 function renderInicio(){
+  /* Campo elegido: filtra lo que tiene centro (leche, rebaño, equipos, silos, casas). Estanques e insumos son comunes. */
+  const fc=S.ini.centro, enC=c=>fc==='Todos'||c===fc, eqC=id=>enC(S.eq.get(id)?.centro);
   const estadoMod=m=>S.mods[m].err?'err':S.mods[m].loaded?'ok':'carga';
   const tarjeta=(mod,titulo,est,d,cls='')=>{
-    const aviso=est==='err'?'No se pudo cargar. Ábrelo para reintentar.':est==='carga'?'Cargando…':!d?'Aún sin datos':'';
+    const aviso=est==='err'?'No se pudo cargar. Ábrelo para reintentar.':est==='carga'?'Cargando…':!d?(fc==='Todos'?'Aún sin datos':`Sin datos de ${esc(fc)}`):'';
     return `<article class="modcard ${cls}" data-mod="${mod}" tabindex="0" role="link" aria-label="Abrir ${titulo}">
-      <div class="modhead">${icono(mod)}<div><h3>${titulo}</h3><div class="cuando">${aviso||d.cuando}</div></div></div>
+      <div class="modhead">${icono(mod)}<div><h3>${titulo}</h3><div class="cuando">${aviso||`<span>${d.cuando}</span>${d.al?d.al.html:''}`}</div></div></div>
       ${aviso?'':`<div><div class="cifra">${d.cifra}</div>${d.lineas?.filter(Boolean).length?`<div class="lineas">${d.lineas.filter(Boolean).map(l=>`<span>${l}</span>`).join('')}</div>`:''}</div>${d.cuerpo||''}`}</article>`};
   const u=(v,t)=>`${v}<small>${t}</small>`;
   /* Leche */
-  const gl=porMes(S.leche,r=>r.fecha), sl=serieMes(gl,rs=>lecheKpis(rs)?.prod??null);
+  const lecheC=fc==='Todos'?S.leche:S.leche.filter(r=>r.sala===fc);
+  const gl=porMes(lecheC,r=>r.fecha), sl=serieMes(gl,rs=>lecheKpis(rs)?.prod??null);
   const kl=sl.length?lecheKpis(gl.get(sl[sl.length-1].m)):null;
+  const aL=antiguedad(lecheC.reduce((a,r)=>r.fecha>a?r.fecha:a,''),2);
+  const caidas=aL&&aL.d<=14?caidasLeche(lecheC.filter(r=>r.fecha>=cutoff('45'))):[];
   /* Rebaño: último conteo de cada centro */
-  const ult=new Map();
-  for(const g of rebGroups()) if(!ult.has(g.centro)||g.fecha>ult.get(g.centro)) ult.set(g.centro,g.fecha);
-  const rebU=rebGroups().filter(g=>ult.get(g.centro)===g.fecha);
+  const ult=new Map(), grupos=rebGroups().filter(g=>enC(g.centro));
+  for(const g of grupos) if(!ult.has(g.centro)||g.fecha>ult.get(g.centro)) ult.set(g.centro,g.fecha);
+  const rebU=grupos.filter(g=>ult.get(g.centro)===g.fecha);
   const fechaReb=[...ult.values()].sort().pop();
+  /* Control cruzado: el último conteo "En ordeña" de cada centro contra las VO de Leche del mismo día */
+  const ultCtrl=new Map();
+  for(const r of S.control) if(enC(r.centro)&&(!ultCtrl.has(r.centro)||r.fecha>ultCtrl.get(r.centro).fecha)) ultCtrl.set(r.centro,r);
+  const descuadre=[...ultCtrl.values()].filter(r=>r.diferencia!=null&&Math.abs(+r.diferencia)>Math.max(2,0.03*(+r.vo_leche||0)));
   /* Equipos */
-  const activos=[...S.eq.values()].filter(e=>e.estado!=='Baja'&&e.estado!=='Vendida');
+  const activos=[...S.eq.values()].filter(e=>e.estado!=='Baja'&&e.estado!=='Vendida'&&enC(e.centro));
+  const rep=activos.filter(e=>e.estado==='En reparación').length;
   const estDocs=activos.flatMap(e=>docsOf(e.id_maquina).map(x=>docState(x.d)));
   const docV=estDocs.filter(s=>s==='Vencido').length, docP=estDocs.filter(s=>s==='Por vencer').length;
   /* Mantenciones */
   const costoM=rs=>rs.reduce((a,r)=>a+(+r.costo_repuestos||0)+(+r.costo_mano_obra||0),0);
-  const sm=serieMes(porMes(S.mant,r=>r.fecha),costoM), lm=sm[sm.length-1];
-  const pr=planRows(), pv=pr.filter(x=>x.m.st==='Vencida').length, pp=pr.filter(x=>x.m.st==='Próxima').length;
-  /* Combustible: los traspasos entre estanques no son consumo */
-  const sc=serieMes(porMes(S.comb.filter(r=>!r.id_estanque_destino),r=>r.fecha),rs=>sum(rs,'litros')), lc=sc[sc.length-1];
+  const sm=serieMes(porMes(S.mant.filter(r=>eqC(r.id_maquina)),r=>r.fecha),costoM), lm=sm[sm.length-1];
+  const pr=planRows().filter(x=>enC(x.e.centro)), pv=pr.filter(x=>x.m.st==='Vencida').length, pp=pr.filter(x=>x.m.st==='Próxima').length;
+  /* Combustible: los traspasos entre estanques no son consumo. Con un campo elegido cuentan las cargas a sus equipos. */
+  const combC=S.comb.filter(r=>!r.id_estanque_destino&&(fc==='Todos'||(r.centro||S.eq.get(r.id_maquina)?.centro)===fc));
+  const sc=serieMes(porMes(combC,r=>r.fecha),rs=>sum(rs,'litros')), lc=sc[sc.length-1];
+  const aC=antiguedad(combC.reduce((a,r)=>r.fecha>a?r.fecha:a,''),10);
+  const revisar=S.mods.combustible.loaded?lecturasARevisar('Todos').filter(x=>eqC(x.c.id_maquina)).length:0;
   const stock=S.stockEst.filter(v=>v.activo!==false);
   /* Inventario */
-  const silos=S.sil.filter(s=>s.activo!==false), sB=silosBajos(), iB=insumosBajos();
+  const silos=S.sil.filter(s=>s.activo!==false&&enC(s.sala)), sB=silosBajos().filter(v=>enC(v.sala)), iB=insumosBajos();
   /* Energía */
   const Ce=S.mods.energia.loaded?enCalc():null, me=Ce?.meses[Ce.meses.length-1];
-  const casasU=Ce?Ce.casas.filter(c=>c.m===me):[], sobre=casasU.filter(c=>c.exc>0);
-  const se=Ce?[...enMensual(Ce.cons.filter(c=>c.p.casa_usuario)).entries()].sort(([a],[b])=>a.localeCompare(b)).slice(-INICIO_MESES).map(([m,v])=>({m,v})):[];
+  const casasU=Ce?Ce.casas.filter(c=>c.m===me&&enC(c.centro)):[], sobre=casasU.filter(c=>c.exc>0);
+  const se=Ce?[...enMensual(Ce.cons.filter(c=>c.p.casa_usuario&&enC(c.p.centro))).entries()].sort(([a],[b])=>a.localeCompare(b)).slice(-INICIO_MESES).map(([m,v])=>({m,v})):[];
   const mesL=sl[sl.length-1]?.m, filasL=mesL?gl.get(mesL):[];
   const salasMes=SALAS.map(s=>({n:s,s:true,c:salaColor(s),u:'L/día',v:lecheKpis(filasL.filter(r=>r.sala===s))?.prod||0})).filter(x=>x.v);
   const estadosReb=ESTADOS_REB.map(e=>({n:e,c:REB_COLOR[e],v:rebU.reduce((a,g)=>a+(g.counts[e]||0),0)}));
@@ -769,25 +880,36 @@ function renderInicio(){
     sB.length&&['inventario',`${sB.length} silo${sB.length===1?'':'s'} con nivel bajo`,''],
     iB.length&&['inventario',`${iB.length} insumo${iB.length===1?'':'s'} bajo el mínimo`,''],
     sobre.length&&['energia',`${sobre.length} casa${sobre.length===1?'':'s'} sobre el límite en ${fmtYm(me)}`,'warn'],
+    aL&&aL.viejo&&['leche',`Leche: el último registro es de ${aL.txt}`,'warn'],
+    ...caidas.map(x=>['leche',`${esc(x.s)}: la leche bajó ${x.p} % en la última semana`,'warn']),
+    descuadre.length&&['rebano',`Rebaño y Leche no cuadran en ${esc(descuadre.map(r=>r.centro).join(', '))}`,'warn'],
     docP&&['maquinaria',`${docP} documento${docP===1?'':'s'} por vencer`,'warn'],
-    pp&&['mantenciones',`${pp} preventiva${pp===1?'':'s'} próxima${pp===1?'':'s'}`,'warn']
+    pp&&['mantenciones',`${pp} preventiva${pp===1?'':'s'} próxima${pp===1?'':'s'}`,'warn'],
+    rep&&['maquinaria',`${rep} equipo${rep===1?'':'s'} en reparación`,'warn'],
+    revisar&&['combustible',`${revisar} lectura${revisar===1?'':'s'} de horómetro por revisar`,'warn']
   ].filter(Boolean);
   const base=S.loaded?'ok':S.loadErr?'err':'carga';
+  const todoListo=S.loaded&&Object.values(S.mods).every(m=>m.loaded);
+  const fechaHoy=new Intl.DateTimeFormat('es-CL',{weekday:'long',day:'numeric',month:'long'}).format(new Date());
+  const hora=S.loadedAt?new Intl.DateTimeFormat('es-CL',{hour:'2-digit',minute:'2-digit'}).format(new Date(S.loadedAt)):'';
+  const lvMes=serieMes(gl,rs=>lecheKpis(rs)?.lvaca??null);
   $('#main').innerHTML=`
-  ${head('Inicio','Una primera mirada a cada módulo, con su último período con datos','')}
+  ${head('Inicio',`${esc(fechaHoy[0].toUpperCase()+fechaHoy.slice(1))} · lo que necesita atención y el estado de cada área`,`<button class="btn" data-act="ini-refrescar" ${S.refrescando?'disabled':''}>${S.refrescando?'Actualizando…':'Actualizar'}</button>`)}
   ${modBanners()}
-  ${alertas.length?`<div class="alertas">${alertas.map(([m,t,c])=>`<button class="alerta ${c}" data-mod="${m}">${t}</button>`).join('')}</div>`:''}
+  <div class="inibar">${['Todos',...SALAS].map(c=>`<button class="chip" data-act="ini-centro" data-val="${c}" aria-pressed="${fc===c}">${c==='Todos'?'Todos los campos':`<span class="sq" style="background:${salaColor(c)}"></span>${c}`}</button>`).join('')}
+    ${hora?`<span class="muted">Actualizado a las ${hora}</span>`:''}</div>
+  ${alertas.length?`<div class="alertas">${alertas.map(([m,t,c])=>`<button class="alerta ${c}" data-mod="${m}">${t}</button>`).join('')}</div>`:todoListo?`<div class="alertas"><span class="alerta ok">Sin alertas${fc==='Todos'?'':' en '+esc(fc)}: nada vencido ni bajo el mínimo</span></div>`:''}
   <div class="modcards">
-    ${tarjeta('leche','Leche',estadoMod('leche'),kl&&{cuando:fmtYm(mesL),cifra:u(fmt0(kl.prod),'L/día'),lineas:[delta(sl),`${fmt0(kl.vacas)} vacas en ordeña · ${fmt1(kl.lvaca)} L/vaca`],
-      cuerpo:`<div class="modcols"><div><div class="modsub">Litros por día, por mes</div>${columnas(sl,v=>fmt0(v)+' L/día')}</div><div><div class="modsub">Litros por día, por sala</div>${barrasH(salasMes)}</div></div>`},'wide')}
-    ${tarjeta('rebano','Rebaño',estadoMod('rebano'),rebU.length&&{cuando:`Último conteo por centro, hasta ${esc(fechaReb)}`,cifra:u(fmt0(totalReb),'animales'),cuerpo:dona(estadosReb,fmt0(totalReb),'animales')})}
-    ${tarjeta('energia','Energía',estadoMod('energia'),me&&{cuando:fmtYm(me),cifra:u(fmt0(sum(sobre,'exc')),'kWh sobre el límite'),lineas:[se.length>1?`Consumo de casas: ${delta(se)}`:''],
+    ${tarjeta('leche','Leche',estadoMod('leche'),kl&&{cuando:fmtYm(mesL),al:aL,cifra:u(fmt0(kl.prod),'L/día'),lineas:[delta(sl),`${fmt0(kl.vacas)} vacas en ordeña · ${fmt1(kl.lvaca)} L/vaca`],
+      cuerpo:`<div class="modcols"><div><div class="modsub">Litros por día, por mes</div>${columnas(sl,v=>fmt0(v)+' L/día')}</div>${fc==='Todos'?`<div><div class="modsub">Litros por día, por sala</div>${barrasH(salasMes)}</div>`:`<div><div class="modsub">Litros por vaca, por mes</div>${columnas(lvMes,v=>fmt1(v)+' L/vaca')}</div>`}</div>`},'wide')}
+    ${tarjeta('rebano','Rebaño',estadoMod('rebano'),rebU.length&&{cuando:`Último conteo: ${esc(fechaReb)}`,al:antiguedad(fechaReb,35),cifra:u(fmt0(totalReb),'animales'),cuerpo:dona(estadosReb,fmt0(totalReb),'animales')})}
+    ${tarjeta('energia','Energía',estadoMod('energia'),me&&casasU.length&&{cuando:fmtYm(me),al:antiguedad(me,50),cifra:u(fmt0(sum(sobre,'exc')),'kWh sobre el límite'),lineas:[se.length>1?`Consumo de casas: ${delta(se)}`:''],
       cuerpo:`<div class="modcols"><div>${dona([{n:'Sobre el límite',v:sobre.length,c:ST.bad},{n:'Dentro del límite',v:conLimite-sobre.length,c:ST.ok}],`${sobre.length}/${conLimite}`,'casas')}<div class="modsub" style="margin-top:10px">Consumo de casas, kWh por mes</div>${columnas(se,v=>fmt0(v)+' kWh')}</div><div><div class="modsub">Mayor exceso del mes (kWh)</div>${topExc.length?barrasH(topExc):'<div class="muted">Ninguna casa sobre el límite.</div>'}</div></div>`},'wide')}
-    ${tarjeta('maquinaria','Equipos',base,activos.length&&{cuando:'Estado actual',cifra:u(fmt0(activos.length),'equipos activos'),
+    ${tarjeta('maquinaria','Equipos',base,activos.length&&{cuando:'Estado actual',cifra:u(fmt0(activos.length),activos.length===1?'equipo activo':'equipos activos'),
       cuerpo:`<div><div class="modsub">Documentos (${fmt0(estDocs.length)})</div>${apilada(estadosDoc)}</div><div><div class="modsub">Por tipo</div>${barrasH(tiposEq)}</div>`})}
     ${tarjeta('mantenciones','Mantenciones',estadoMod('mantenciones'),(lm||pr.length)&&{cuando:lm?fmtYm(lm.m):'Plan por horas',cifra:lm?clp(lm.v):u(pv,'vencidas'),lineas:[lm?delta(sm):''],
       cuerpo:`${sm.length?`<div><div class="modsub">Costo por mes</div>${columnas(sm,clp)}</div>`:''}<div><div class="modsub">Plan preventivo (${fmt0(pr.length)} equipos)</div>${apilada(estadosPlan)}</div>`})}
-    ${tarjeta('combustible','Combustible',estadoMod('combustible'),lc&&{cuando:fmtYm(lc.m),cifra:u(fmt0(lc.v),'L despachados'),lineas:[delta(sc)],
+    ${tarjeta('combustible','Combustible',estadoMod('combustible'),lc&&{cuando:fmtYm(lc.m),al:aC,cifra:u(fmt0(lc.v),'L despachados'),lineas:[delta(sc)],
       cuerpo:`<div><div class="modsub">Litros por mes</div>${columnas(sc,v=>fmt0(v)+' L')}</div>${stock.length?`<div><div class="modsub">Estanques</div>${niveles(nivEst)}</div>`:''}`})}
     ${tarjeta('inventario','Inventario',estadoMod('inventario'),(silos.length||S.ins.length)&&{cuando:'Estado actual',cifra:u(fmt0(sum(silos,'stock_kg')),'kg en silos'),lineas:[iB.length?pl(iB.length,'insumo bajo el mínimo','insumos bajo el mínimo'):''],
       cuerpo:silos.length?`<div><div class="modsub">Silos</div>${niveles(nivSil)}</div>`:''})}
@@ -1017,7 +1139,7 @@ async function guardarNivel(form){
   const err=cap!=null&&!(cap>0)?'La capacidad debe ser mayor que cero.':al!=null&&!(al>=0)?'El aviso no puede ser negativo.':cap!=null&&al!=null&&al>cap?'El aviso no puede ser mayor que la capacidad.':'';
   S.nivelErr[id]=err;
   if(err){render();return}
-  try{await must(sb.from('estanques').update({capacidad_l:cap,alerta_litros:al}).eq('id_estanque',id));toast('Nivel del estanque guardado');await Promise.all([load(),loadMod('combustible')])}
+  try{await filas(sb.from('estanques').update({capacidad_l:cap,alerta_litros:al}).eq('id_estanque',id));toast('Nivel del estanque guardado');await Promise.all([load(),loadMod('combustible')])}
   catch(e){S.nivelErr[id]=errMsg(e);render()}
 }
 function renderCargas(list){
@@ -1164,13 +1286,13 @@ async function guardarLista(){
   if(items.some(i=>i.nombre.toUpperCase()===nombre&&(!ed||i.pk!==ed.pk))){S.lErr=`Ya existe “${nombre}”.`;render();return}
   try{
     if(k==='labores'){
-      if(ed) await must(sb.from('labores').update({labor:nombre}).eq('labor',ed.pk));
+      if(ed) await filas(sb.from('labores').update({labor:nombre}).eq('labor',ed.pk));
       else await must(sb.from('labores').insert({labor:nombre}));
     }else{
       const row={nombre};
       for(const [id,,campo,tipo] of Lc.extra){row[campo]=tipo==='num'?numv(id,1):tipo==='bool'?val(id)==='Sí':(val(id)||null)}
       if(k==='destinos'&&!row.tipo) row.tipo='Otro';
-      if(ed) await must(sb.from(Lc.tabla).update(row).eq(Lc.pk,ed.pk));
+      if(ed) await filas(sb.from(Lc.tabla).update(row).eq(Lc.pk,ed.pk));
       else{
         const gen=nextIdGen(Lc.pref,items.map(i=>i.pk));const id=gen().replace(/-0+(\d{2,})$/,'-$1');
         await must(sb.from(Lc.tabla).insert({...row,[Lc.pk]:id,activo:true}));
@@ -1184,10 +1306,10 @@ async function accionLista(accion){
   const k=S.cb.lista, Lc=LISTAS[k], ed=Lc.items().find(i=>String(i.pk)===String(S.lEdit));
   if(!ed) return;
   try{
-    if(accion==='activo') await must(sb.from(Lc.tabla).update({activo:!ed.activo}).eq(Lc.pk,ed.pk));
+    if(accion==='activo') await filas(sb.from(Lc.tabla).update({activo:!ed.activo}).eq(Lc.pk,ed.pk));
     else{
       if(Lc.uso(ed.pk)>0){S.lConf=false;S.lErr=`“${ed.nombre}” tiene ${Lc.uso(ed.pk)} usos registrados, así que no se puede eliminar. Desactívalo para que no aparezca en las listas.`;render();return}
-      await must(sb.from(Lc.tabla).delete().eq(Lc.pk,ed.pk));
+      await filas(sb.from(Lc.tabla).delete().eq(Lc.pk,ed.pk));
     }
     S.lEdit=null;S.lConf=false;S.lErr='';toast(accion==='activo'?(ed.activo?'Desactivado':'Activado'):'Eliminado');
     await (k==='choferes'?load():loadMod('combustible'));
@@ -1520,7 +1642,32 @@ function fld(id,label,val,{type='text',wide=false,need=false,list=null,ro=false,
     `<input class="field" id="${id}" type="${type}" value="${esc(val??'')}" ${ro?'readonly':''} ${type==='number'?'inputmode="decimal" min="0" step="any"':''} placeholder="${esc(ph)}">`;
   return `<label class="f ${wide?'wide':''} ${need?'need':''}">${label}${inner}</label>`;
 }
+/* Aviso de cambios sin guardar: va oculto en el pie de cada ficha y se muestra sin volver a dibujar el formulario. */
+const cierreHtml=()=>`<div class="confirm" id="cerrar-conf" style="flex-basis:100%" role="alert" hidden>Hay cambios sin guardar. <button class="btn danger" type="button" data-act="close-si">Descartar cambios</button><button class="btn ghost" type="button" data-act="close-no">Seguir editando</button></div>`;
+/* Cerrar una ficha. Con cambios sin guardar pregunta antes, para no perder lo escrito por un toque fuera de la ficha. */
+function cerrarFicha(forzar){
+  if(S.saving||(!S.open&&!S.rec)) return;
+  if(S.dirty&&!forzar){const c=$('#cerrar-conf');if(c){c.hidden=false;c.scrollIntoView({block:'nearest'});return}}
+  S.dirty=false;
+  if(S.rec){closeRec();return}
+  S.open=null;S.formErr='';S.confirmDel=false;renderDrawer();
+}
+/* Vuelve a dibujar la ficha conservando la posición, el foco y sin repetir la animación de entrada. */
 function renderDrawer(){
+  const L=$('#layer'), antes=L.querySelector('.dbody'), top=antes?antes.scrollTop:0;
+  const foco=document.activeElement&&L.contains(document.activeElement)?document.activeElement.id:'';
+  dibujarFicha();
+  const d=L.querySelector('.drawer');
+  if(!d){S.dirty=false;S.msgVisto='';return}
+  const b=L.querySelector('.dbody');
+  if(!antes) d.classList.add('entra'); else if(b) b.scrollTop=top;
+  if(foco){const el=document.getElementById(foco);if(el&&el!==document.activeElement)el.focus({preventScroll:true})}
+  /* un error o aviso nuevo se lleva a la vista: en formularios largos queda bajo el pliegue */
+  const msg=S.formErr||S.warn;
+  if(msg&&msg!==S.msgVisto){const el=b&&[...b.querySelectorAll('.err:not([hidden]),.banner')].pop();if(el)el.scrollIntoView({block:'nearest'})}
+  S.msgVisto=msg;
+}
+function dibujarFicha(){
   const L=$('#layer');
   if(S.rec&&S.user){renderRec();return}
   if(!S.open||!S.user){L.innerHTML='';return}
@@ -1580,6 +1727,7 @@ function renderDrawer(){
     <div class="dfoot">
       <div>${isNew?'':S.confirmDel?`<span class="confirm">¿Eliminar ${esc(id)} y sus documentos? <button class="btn danger" data-act="del-yes" ${ro?'disabled':''}>Eliminar</button><button class="btn ghost" data-act="del-no">Cancelar</button></span>`:`<button class="btn danger" data-act="del" ${ro?'disabled':''}>Eliminar equipo</button>`}</div>
       <div class="actions"><button class="btn ghost" data-act="close">Cancelar</button><button class="btn primary" data-act="save" ${ro?'disabled':''}>${S.saving?'Guardando…':'Guardar ficha'}</button></div>
+      ${cierreHtml()}
     </div>
   </section>`;
 }
@@ -1611,24 +1759,26 @@ async function saveEquipo(){
   }
   S.formErr='';S.saving=true;renderDrawer();
   try{
+    if(!isNew) await sinCambios('equipos',{id_maquina:id},S.openVer);
     await upsert('equipos',[e],'id_maquina');
     await upsert('documentos',docs,'id_maquina,documento');
-    S.saving=false;S.open=null;S.confirmDel=false;toast(`Ficha de ${id} guardada`);await load();
+    S.saving=false;S.open=null;S.confirmDel=false;renderDrawer();toast(`Ficha de ${id} guardada`);await load();
   }catch(err){S.saving=false;S.formErr=errMsg(err);renderDrawer()}
 }
 async function deleteEquipo(){
   const id=S.open;
   S.saving=true;renderDrawer();
   try{
-    const [c,m]=await Promise.all([
+    const [c,m,f]=await Promise.all([
       sb.from('combustible').select('id_carga',{count:'exact',head:true}).eq('id_maquina',id),
-      sb.from('mantenciones').select('id_intervencion',{count:'exact',head:true}).eq('id_maquina',id)]);
-    if(c.error) throw c.error; if(m.error) throw m.error;
-    if((c.count||0)+(m.count||0)>0){S.saving=false;S.confirmDel=false;S.formErr=`${id} tiene cargas de combustible o mantenciones registradas, así que no se puede eliminar. Cambia su estado a “Baja” o “Vendida”.`;renderDrawer();return}
+      sb.from('mantenciones').select('id_intervencion',{count:'exact',head:true}).eq('id_maquina',id),
+      sb.from('facturas').select('id',{count:'exact',head:true}).eq('id_maquina',id)]);
+    if(c.error) throw c.error; if(m.error) throw m.error; if(f.error) throw f.error;
+    if((c.count||0)+(m.count||0)+(f.count||0)>0){S.saving=false;S.confirmDel=false;S.formErr=`${id} tiene cargas de combustible, mantenciones o facturas registradas, así que no se puede eliminar. Cambia su estado a “Baja” o “Vendida”.`;renderDrawer();return}
     await must(sb.from('documentos').delete().eq('id_maquina',id));
-    await must(sb.from('equipos').delete().eq('id_maquina',id));
+    await filas(sb.from('equipos').delete().eq('id_maquina',id));
     if(S.imgs.has(id)){await sb.storage.from('equipos').remove([S.imgs.get(id).path]);S.imgs.delete(id)}
-    S.saving=false;S.open=null;S.confirmDel=false;toast(`${id} eliminado`);await load();
+    S.saving=false;S.open=null;S.confirmDel=false;renderDrawer();toast(`${id} eliminado`);await load();
   }catch(err){S.saving=false;S.formErr=errMsg(err);renderDrawer()}
 }
 
@@ -1745,7 +1895,7 @@ function enCalc(){
       const c={m,p,l,ant:pa,meses,kwh:kwh==null?null:enR2(kwh),aviso:[...av].join('; ')};
       cons.push(c);clave.set(m+'|'+p.id_punto,c);ant=l;
       if(p.casa_usuario){
-        const k=m+'|'+p.casa_usuario, x=casas.get(k)||casas.set(k,{m,casa:p.casa_usuario,tipo:p.tipo,aplica:false,limite:0,kwh:0,meses:1,aviso:[]}).get(k);
+        const k=m+'|'+p.casa_usuario, x=casas.get(k)||casas.set(k,{m,casa:p.casa_usuario,tipo:p.tipo,centro:p.centro,aplica:false,limite:0,kwh:0,meses:1,aviso:[]}).get(k);
         x.kwh+=c.kwh||0;x.meses=Math.max(x.meses,meses);if(p.aplica_limite){x.aplica=true;x.limite=+p.limite_kwh}
         if(c.aviso) x.aviso.push(c.aviso);
       }
@@ -1913,11 +2063,10 @@ async function importarEnergia(wb){
   });
   S.importKind='energia';S.importIssues=issues;
   if(!puntos.length&&!filas.length){render();toast('No encontré filas válidas para importar.');return}
-  toast(`Importando ${fmt0(filas.length)} lecturas…`);
-  try{await upsert('energia_puntos',puntos,'id_punto');await upsert('energia_lecturas',dedupe(filas,r=>r.periodo+'|'+r.id_punto),'periodo,id_punto')}
-  catch(e){toast(errMsg(e));await loadMod('energia');return}
-  toast(`${puntos.length?fmt0(puntos.length)+' puntos · ':''}${fmt0(filas.length)} lecturas importadas${issues.length?` · ${issues.length} omitidas`:''}`);
-  await loadMod('energia');
+  const lecs=dedupe(filas,r=>r.periodo+'|'+r.id_punto), yaP=new Set(S.enP.map(p=>p.id_punto)), yaL=new Set(S.enL.map(l=>l.periodo+'|'+l.id_punto));
+  const exP=puntos.filter(p=>yaP.has(p.id_punto)).length, exL=lecs.filter(l=>yaL.has(l.periodo+'|'+l.id_punto)).length;
+  proponerImport('energia',[puntos.length&&parte(puntos.length,'puntos',exP),lecs.length&&parte(lecs.length,'lecturas',exL)],
+    [{table:'energia_puntos',rows:puntos,conflict:'id_punto'},{table:'energia_lecturas',rows:lecs,conflict:'periodo,id_punto'}],issues,exP+exL>0,()=>loadMod('energia'));
 }
 /* Stock del lugar del movimiento (silo o bodega); null si el silo aún no tiene medición. */
 function stockLugar(r){
@@ -1962,10 +2111,11 @@ const REC={
       if(r.aplica_limite&&!r.casa_usuario) return 'Para aplicar el límite, indica la casa o usuario.';
     },
     warn:()=>'',
-    async save(r,n,key){if(n) await must(sb.from('energia_puntos').insert(r)); else await must(sb.from('energia_puntos').update(r).eq('id_punto',key))},
+    ver:key=>['energia_puntos',{id_punto:key}],
+    async save(r,n,key){if(n) await must(sb.from('energia_puntos').insert(r)); else await filas(sb.from('energia_puntos').update(r).eq('id_punto',key))},
     async del(key){
       if(S.enL.some(l=>l.id_punto===key)) throw {aviso:'Este punto tiene lecturas, así que no se puede eliminar. Cambia su estado.'};
-      await must(sb.from('energia_puntos').delete().eq('id_punto',key));
+      await filas(sb.from('energia_puntos').delete().eq('id_punto',key));
     },
     done:'Punto guardado',after:['energia']
   },
@@ -1994,12 +2144,13 @@ const REC={
       const p=enAnterior(r.id_punto,r.periodo.slice(0,7));
       return p&&r.evento==='Normal'&&r.lectura<+p.lectura?`La lectura es menor que la anterior (${fmtN(p.lectura)}). Si el medidor dio la vuelta o se cambió, elige ese evento.`:'';
     },
+    ver:key=>{const [periodo,id_punto]=key.split('|');return ['energia_lecturas',{periodo,id_punto}]},
     async save(r,n,key){
       if(n){await must(sb.from('energia_lecturas').insert(r));return}
       const [p,id]=key.split('|');
-      await must(sb.from('energia_lecturas').update({lectura:r.lectura,evento:r.evento,observacion:r.observacion}).eq('periodo',p).eq('id_punto',id));
+      await filas(sb.from('energia_lecturas').update({lectura:r.lectura,evento:r.evento,observacion:r.observacion}).eq('periodo',p).eq('id_punto',id));
     },
-    async del(key){const [p,id]=key.split('|');await must(sb.from('energia_lecturas').delete().eq('periodo',p).eq('id_punto',id))},
+    async del(key){const [p,id]=key.split('|');await filas(sb.from('energia_lecturas').delete().eq('periodo',p).eq('id_punto',id))},
     done:'Lectura guardada',after:['energia']
   },
   ins:{
@@ -2022,10 +2173,10 @@ const REC={
       if(S.ins.some(i=>i.id_insumo!==key&&i.nombre.toUpperCase()===r.nombre.toUpperCase())) return `Ya existe el insumo ${r.nombre}.`;
     },
     warn:()=>'',
-    async save(r,n,key){if(n) await must(sb.from('insumos').insert(r)); else await must(sb.from('insumos').update(r).eq('id_insumo',key))},
+    async save(r,n,key){if(n) await must(sb.from('insumos').insert(r)); else await filas(sb.from('insumos').update(r).eq('id_insumo',key))},
     async del(key){
       if(S.movs.some(m=>m.id_insumo===key)||S.sil.some(s=>s.id_insumo===key)) throw {aviso:'Este insumo tiene movimientos o silos, así que no se puede eliminar. Déjalo como inactivo.'};
-      await must(sb.from('insumos').delete().eq('id_insumo',key));
+      await filas(sb.from('insumos').delete().eq('id_insumo',key));
     },
     done:'Insumo guardado',after:['inventario','base']
   },
@@ -2056,10 +2207,10 @@ const REC={
       if(otro) return `${otro.nombre} ya descuenta el concentrado de ${r.sala}. Indica “No” en este silo o cámbialo en ${otro.nombre}.`;
     },
     warn:()=>'',
-    async save(r,n,key){if(n) await must(sb.from('silos').insert(r)); else await must(sb.from('silos').update(r).eq('id_silo',key))},
+    async save(r,n,key){if(n) await must(sb.from('silos').insert(r)); else await filas(sb.from('silos').update(r).eq('id_silo',key))},
     async del(key){
       if(S.movs.some(m=>m.id_silo===key)) throw {aviso:'Este silo tiene movimientos, así que no se puede eliminar. Déjalo como inactivo.'};
-      await must(sb.from('silos').delete().eq('id_silo',key));
+      await filas(sb.from('silos').delete().eq('id_silo',key));
     },
     done:'Silo guardado',after:['inventario','base']
   },
@@ -2115,8 +2266,9 @@ const REC={
       if(r.tipo==='Salida'&&n){const s=stockLugar(r);if(s!=null&&r.cantidad>s) return `La salida es mayor que el stock registrado (${fmtN(s)} ${insUnidad(r.id_insumo)}). Revisa la cantidad o pulsa “Guardar igual”.`}
       return '';
     },
-    async save(r,n,key){if(n) await must(sb.from('inv_movimientos').insert(r)); else await must(sb.from('inv_movimientos').update(r).eq('id_mov',key))},
-    async del(key){await must(sb.from('inv_movimientos').delete().eq('id_mov',key))},
+    ver:key=>['inv_movimientos',{id_mov:key}],
+    async save(r,n,key){if(n) await must(sb.from('inv_movimientos').insert(r)); else await filas(sb.from('inv_movimientos').update(r).eq('id_mov',key))},
+    async del(key){await filas(sb.from('inv_movimientos').delete().eq('id_mov',key))},
     done:'Movimiento guardado',after:['inventario','base']
   },
   comb:{
@@ -2179,9 +2331,10 @@ const REC={
     },
     async save(r,n,key){
       const {dtipo,...row}=r;
-      if(n) await must(sb.from('combustible').insert(row)); else await must(sb.from('combustible').update(row).eq('id_carga',key));
+      if(n) await must(sb.from('combustible').insert(row)); else await filas(sb.from('combustible').update(row).eq('id_carga',key));
     },
-    async del(key){await must(sb.from('combustible').delete().eq('id_carga',key))},
+    ver:key=>['combustible',{id_carga:key}],
+    async del(key){await filas(sb.from('combustible').delete().eq('id_carga',key))},
     done:'Carga guardada',after:['combustible','mantenciones','base']
   },
   ing:{
@@ -2210,8 +2363,9 @@ const REC={
       if(r.precio_litro!=null&&r.precio_litro<0) return 'El precio no puede ser negativo.';
     },
     warn:r=>r.tipo==='Compra'&&r.precio_litro==null?'La compra no tiene precio: los despachos seguirán valorizados con el precio de la compra anterior. Pulsa “Guardar igual” si no lo tienes.':'',
-    async save(r,n,key){if(n) await must(sb.from('combustible_ingresos').insert(r)); else await must(sb.from('combustible_ingresos').update(r).eq('id_ingreso',key))},
-    async del(key){await must(sb.from('combustible_ingresos').delete().eq('id_ingreso',key))},
+    ver:key=>['combustible_ingresos',{id_ingreso:key}],
+    async save(r,n,key){if(n) await must(sb.from('combustible_ingresos').insert(r)); else await filas(sb.from('combustible_ingresos').update(r).eq('id_ingreso',key))},
+    async del(key){await filas(sb.from('combustible_ingresos').delete().eq('id_ingreso',key))},
     done:'Ingreso guardado',after:['combustible','base']
   },
   med:{
@@ -2235,7 +2389,8 @@ const REC={
     },
     warn:()=>'',
     async save(r){await upsert('estanque_mediciones',[r],'id_estanque,fecha')},
-    async del(key){const [id_estanque,fecha]=key.split('|');await must(sb.from('estanque_mediciones').delete().match({id_estanque,fecha}))},
+    ver:key=>{const [id_estanque,fecha]=key.split('|');return ['estanque_mediciones',{id_estanque,fecha}]},
+    async del(key){const [id_estanque,fecha]=key.split('|');await filas(sb.from('estanque_mediciones').delete().match({id_estanque,fecha}))},
     done:'Medición guardada',after:['combustible','base']
   },
   mant:{
@@ -2271,8 +2426,9 @@ const REC={
       if(r.costo_repuestos<0||r.costo_mano_obra<0) return 'Los costos no pueden ser negativos.';
     },
     warn:(r,n,key)=>horoWarn(r,n?null:key),
-    async save(r,n,key){if(n) await must(sb.from('mantenciones').insert(r)); else await must(sb.from('mantenciones').update(r).eq('id_intervencion',key))},
-    async del(key){await must(sb.from('mantenciones').delete().eq('id_intervencion',key))},
+    ver:key=>['mantenciones',{id_intervencion:key}],
+    async save(r,n,key){if(n) await must(sb.from('mantenciones').insert(r)); else await filas(sb.from('mantenciones').update(r).eq('id_intervencion',key))},
+    async del(key){await filas(sb.from('mantenciones').delete().eq('id_intervencion',key))},
     done:'Intervención guardada',after:['mantenciones','combustible','base']
   },
   reb:{
@@ -2303,7 +2459,7 @@ const REC={
       if(!n) for(const e of ESTADOS_REB) if(r.counts[e]==null&&S.reb.some(x=>x.fecha===r.fecha&&x.centro===r.centro&&x.lote===r.lote&&x.estado===e))
         await must(sb.from('rebano').delete().match({fecha:r.fecha,centro:r.centro,lote:r.lote,estado:e}));
     },
-    async del(key){const [fecha,centro,lote]=key.split('|');await must(sb.from('rebano').delete().match({fecha,centro,lote}))},
+    async del(key){const [fecha,centro,lote]=key.split('|');await filas(sb.from('rebano').delete().match({fecha,centro,lote}))},
     done:'Conteo guardado',after:['rebano']
   },
   leche:{
@@ -2358,9 +2514,10 @@ const REC={
       if(l.length&&r.vo!=null&&l.reduce((a,b)=>a+b,0)!==r.vo) return `La suma de los lotes (${l.reduce((a,b)=>a+b,0)}) no coincide con el VO total (${r.vo}). Revisa, o pulsa “Guardar igual”.`;
       return '';
     },
+    ver:key=>{const [fecha,sala]=key.split('|');return ['leche',{fecha,sala}]},
     async save(r){await upsert('leche',[r],'fecha,sala')},
-    async del(key){const [fecha,sala]=key.split('|');await must(sb.from('leche').delete().match({fecha,sala}))},
-    done:'Registro guardado',after:['leche','rebano']
+    async del(key){const [fecha,sala]=key.split('|');await filas(sb.from('leche').delete().match({fecha,sala}))},
+    done:'Registro guardado',after:['leche','rebano','inventario','base']   // el concentrado de Leche descuenta el silo de la sala
   },
   fact:{
     title:(r,n)=>n?'Cargar factura':docCorto(r),
@@ -2414,33 +2571,47 @@ const REC={
     warn(r){const cu=cuadreFactura(r);return cu.ok?'':`${cu.txt}. Revisa los montos, o pulsa “Guardar igual”.`},
     async save(r,n,key){
       const row=Object.fromEntries(FACT_COLS.map(k=>[k,r[k]??null]));
-      if(!n){await must(sb.from('facturas').update(row).eq('id',key));return}
+      if(!n){await filas(sb.from('facturas').update(row).eq('id',key));return}
       const file=S.rec.file, path=`${r.id_maquina}/${r.fecha}_${(r.folio||'sf').replace(/[^\w-]/g,'')}_${Date.now()}.pdf`;
       const up=await sb.storage.from('facturas').upload(path,file,{contentType:'application/pdf'});
       if(up.error) throw up.error;
       const ins=await sb.from('facturas').insert({...row,archivo:path,nombre_archivo:file.name}).select('id').single();
       if(ins.error){await sb.storage.from('facturas').remove([path]);throw ins.error}
       const costo=COSTO_FACT(r), campo=r.cargo==='mo'?'costo_mano_obra':'costo_repuestos';
-      let idInt=null;
-      if(r.vinculo==='nueva'){
-        const m={fecha:r.fecha,id_maquina:r.id_maquina,tipo:r.mtipo||'Correctiva',sistema:r.msis,descripcion:r.detalle?r.detalle.slice(0,300):null,horometro:r.mhoro,
-          costo_repuestos:campo==='costo_repuestos'?costo:0,costo_mano_obra:campo==='costo_mano_obra'?costo:0,proveedor:r.proveedor,tipo_taller:'Externo'};
-        const res=await sb.from('mantenciones').insert(m).select('id_intervencion').single();
-        if(res.error) throw res.error;
-        idInt=res.data.id_intervencion;
-      }else if(r.vinculo==='existente'){
-        const cur=S.mant.find(m=>m.id_intervencion===r.id_intervencion);
-        const upd={[campo]:(+cur[campo]||0)+costo};
-        if(!cur.proveedor&&r.proveedor) upd.proveedor=r.proveedor;
-        await must(sb.from('mantenciones').update(upd).eq('id_intervencion',r.id_intervencion));
-        idInt=r.id_intervencion;
+      /* Son varios pasos (PDF, factura, intervención, costo). Si uno falla se deshacen los anteriores:
+         no queda una factura suelta ni un costo sumado sin su factura. El costo se suma al final. */
+      let idInt=null, creada=false;
+      try{
+        if(r.vinculo==='nueva'){
+          const m={fecha:r.fecha,id_maquina:r.id_maquina,tipo:r.mtipo||'Correctiva',sistema:r.msis,descripcion:r.detalle?r.detalle.slice(0,300):null,horometro:r.mhoro,
+            costo_repuestos:campo==='costo_repuestos'?costo:0,costo_mano_obra:campo==='costo_mano_obra'?costo:0,proveedor:r.proveedor,tipo_taller:'Externo'};
+          const res=await sb.from('mantenciones').insert(m).select('id_intervencion').single();
+          if(res.error) throw res.error;
+          idInt=res.data.id_intervencion;creada=true;
+          await filas(sb.from('facturas').update({id_intervencion:idInt}).eq('id',ins.data.id));
+        }else if(r.vinculo==='existente'){
+          idInt=r.id_intervencion;
+          await filas(sb.from('facturas').update({id_intervencion:idInt}).eq('id',ins.data.id));
+          /* el costo se lee de la base en este momento: el de la pantalla puede estar desactualizado */
+          const cur=await sb.from('mantenciones').select(`${campo},proveedor`).eq('id_intervencion',idInt).limit(1);
+          if(cur.error) throw cur.error;
+          if(!cur.data.length) throw {aviso:`La intervención ${idInt} ya no existe. Elige otra o crea una nueva.`};
+          const upd={[campo]:(+cur.data[0][campo]||0)+costo};
+          if(!cur.data[0].proveedor&&r.proveedor) upd.proveedor=r.proveedor;
+          await filas(sb.from('mantenciones').update(upd).eq('id_intervencion',idInt));
+        }
+      }catch(e){
+        if(creada) await sb.from('mantenciones').delete().eq('id_intervencion',idInt);
+        await sb.from('facturas').delete().eq('id',ins.data.id);
+        await sb.storage.from('facturas').remove([path]);
+        throw e;
       }
-      if(idInt) await must(sb.from('facturas').update({id_intervencion:idInt}).eq('id',ins.data.id));
       S.rec.done=idInt?(r.vinculo==='nueva'?`Factura guardada y ${idInt} creada con ${clp(costo)}`:`Factura guardada y ${clp(costo)} sumados a ${idInt}`):'Factura guardada';
     },
+    ver:key=>['facturas',{id:key}],
     async del(key){
       const f=S.fact.find(x=>String(x.id)===String(key));
-      await must(sb.from('facturas').delete().eq('id',key));
+      await filas(sb.from('facturas').delete().eq('id',key));
       if(f?.archivo) await sb.storage.from('facturas').remove([f.archivo]);
     },
     done:'Factura guardada',after:['mantenciones','combustible','base']
@@ -2546,7 +2717,7 @@ async function verPdf(path){
   const w=window.open('','_blank');
   const {data,error}=await sb.storage.from('facturas').createSignedUrl(path,600);
   if(error||!data){if(w)w.close();toast('No se pudo abrir el PDF: '+(error?.message||'sin respuesta'));return}
-  if(w) w.location.href=data.signedUrl; else location.href=data.signedUrl;
+  if(w){w.opener=null;w.location.href=data.signedUrl} else location.href=data.signedUrl;
 }
 const COSTO_FACT=r=>(r.monto_neto||0)+(r.monto_exento||0);
 const FACT_COLS=['id_maquina','tipo_documento','folio','rut_proveedor','proveedor','fecha','detalle','monto_neto','monto_exento','iva','monto_total'];
@@ -2602,6 +2773,7 @@ function renderRec(){
     <div class="dfoot">
       <div>${isNew?'':S.confirmDel?`<span class="confirm">¿Eliminar este registro? <button class="btn danger" data-act="rec-del-yes" ${ro?'disabled':''}>Eliminar</button><button class="btn ghost" data-act="del-no">Cancelar</button></span>`:`<button class="btn danger" data-act="del" ${ro?'disabled':''}>Eliminar</button>`}</div>
       <div class="actions"><button class="btn ghost" data-act="close">Cancelar</button><button class="btn primary" data-act="rec-save" ${ro?'disabled':''}>${S.saving?'Guardando…':S.warn?'Guardar igual':'Guardar'}</button></div>
+      ${cierreHtml()}
     </div>
   </section>`;
 }
@@ -2619,14 +2791,19 @@ async function saveRec(){
   const w=S.warnAck?'':M.warn(r,isNew,key);
   if(w){S.warn=w;S.warnAck=true;S.formErr='';renderDrawer();return}
   S.formErr='';S.saving=true;renderDrawer();
-  try{await M.save(r,isNew,key);S.saving=false;const msg=S.rec.done||M.done;closeRec();toast(msg);await afterWrite(M.after)}
+  try{
+    if(!isNew&&M.ver){const [t,d]=M.ver(key);await sinCambios(t,d,S.rec.data.actualizado_en)}
+    await M.save(r,isNew,key);S.saving=false;const msg=S.rec.done||M.done;closeRec();toast(msg);await afterWrite(M.after)}
   catch(e){S.saving=false;S.formErr=errMsg(e);renderDrawer()}
 }
 async function deleteRec(){
+  if(S.saving||!S.rec) return;
   const {kind,key}=S.rec, M=REC[kind];
   S.saving=true;renderDrawer();
-  try{await M.del(key);S.saving=false;closeRec();toast('Registro eliminado');await afterWrite(M.after)}
-  catch(e){S.saving=false;S.formErr=errMsg(e);renderDrawer()}
+  try{
+    if(M.ver){const [t,d]=M.ver(key);await sinCambios(t,d,S.rec.data.actualizado_en)}
+    await M.del(key);S.saving=false;closeRec();toast('Registro eliminado');await afterWrite(M.after)}
+  catch(e){S.saving=false;S.confirmDel=false;S.formErr=errMsg(e);renderDrawer()}
 }
 
 /* ---------- importar Excel (upsert por clave; nunca borra) ---------- */
@@ -2718,6 +2895,9 @@ async function importReg(kind,file){
     table='rebano';conflict='fecha,centro,lote,estado';rows=dedupe(rows,r=>[r.fecha,r.centro,r.lote,r.estado].join('|'));
   }else if(kind==='leche'){
     const src=sheetRows(wb,['leche_diaria','leche_normalizada','leche','por_sala'],true);
+    /* Solo se escriben las columnas que trae el archivo: un Excel con menos columnas no borra el detalle ya cargado (concentrado, calidad…). */
+    const trae=new Set(Object.keys(src[0]||{}).map(k=>LECHE_COLS[k]).filter(Boolean));
+    const concCalc=trae.has('conc_sala_kg')||trae.has('conc_carro_kg');
     src.forEach((r0,i)=>{
       const r={};for(const [k,v] of Object.entries(r0)) if(LECHE_COLS[k]) r[LECHE_COLS[k]]=v;
       const f=`Fila ${i+2}`;
@@ -2726,9 +2906,9 @@ async function importReg(kind,file){
       if(!fecha) return issues.push(`${f}: fecha no válida.`);
       if(!SALAS.includes(sala)) return issues.push(`${f}: sala “${r.sala??''}” no reconocida.`);
       const o={fecha,sala};
-      for(const k of LECHE_NUM){let v=nm(r[k]);if(v!=null&&LECHE_INT.includes(k))v=Math.round(v);o[k]=v}
-      for(const k of LECHE_TXT) o[k]=r[k]==null?null:String(r[k]);
-      if(o.conc_kg==null&&(o.conc_sala_kg!=null||o.conc_carro_kg!=null)) o.conc_kg=(o.conc_sala_kg||0)+(o.conc_carro_kg||0);
+      for(const k of LECHE_NUM) if(trae.has(k)){let v=nm(r[k]);if(v!=null&&LECHE_INT.includes(k))v=Math.round(v);o[k]=v}
+      for(const k of LECHE_TXT) if(trae.has(k)) o[k]=r[k]==null?null:String(r[k]);
+      if(concCalc){const calc=o.conc_sala_kg!=null||o.conc_carro_kg!=null?(o.conc_sala_kg||0)+(o.conc_carro_kg||0):null;o.conc_kg=o.conc_kg??calc}
       if([o.vo,...L_PARTES.map(k=>o[k]),o.conc_kg].every(v=>v==null)) return;
       const neg=LECHE_NONNEG.filter(k=>o[k]!=null&&o[k]<0);
       if(neg.length) return issues.push(`${f} (${fecha} ${sala}): valor negativo en ${neg.join(', ')}.`);
@@ -2738,11 +2918,11 @@ async function importReg(kind,file){
   }
   S.importKind=kind;S.importIssues=issues;
   if(!rows.length){render();toast('No encontré filas válidas para importar.');return}
-  toast(`Importando ${fmt0(rows.length)} filas…`);
-  try{await upsert(table,rows,conflict)}
-  catch(e){toast(errMsg(e));await loadMod(kind);return}
-  toast(`${fmt0(rows.length)} filas importadas${issues.length?` · ${issues.length} omitidas`:''}`);
-  await afterWrite(kind==='combustible'||kind==='mantenciones'?['combustible','mantenciones','base']:kind==='leche'?['leche','rebano']:['rebano']);
+  const clave={combustible:r=>r.id_carga,mantenciones:r=>r.id_intervencion,rebano:r=>[r.fecha,r.centro,r.lote,r.estado].join('|'),leche:r=>r.fecha+'|'+r.sala}[kind];
+  const ya=new Set(({combustible:S.comb,mantenciones:S.mant,rebano:S.reb,leche:S.leche}[kind]).map(clave)), ex=rows.filter(r=>ya.has(clave(r))).length;
+  const nombre={combustible:'cargas de combustible',mantenciones:'intervenciones',rebano:'filas de conteo',leche:'registros diarios de leche'}[kind];
+  proponerImport(kind,[parte(rows.length,nombre,ex)],[{table,rows,conflict}],issues,ex>0,
+    ()=>afterWrite(kind==='combustible'||kind==='mantenciones'?['combustible','mantenciones','base']:kind==='leche'?['leche','rebano','inventario','base']:['rebano']));
 }
 /* Importación de la planilla de petróleo del fundo (hoja "Base Datos"): reposiciones → ingresos al estanque,
    despachos → cargas (a equipo, otro destino o traspaso a estanque), saldo inicial desde la columna EXISTENCIA.
@@ -2802,11 +2982,10 @@ async function importarBasePetroleo(wb){
   for(const i of ings) i.id_ingreso=iByRef.get(i.ref_externa)||genI();
   S.importKind='combustible';S.importIssues=issues;
   if(!cargas.length&&!ings.length){render();toast('No encontré despachos ni reposiciones válidas en la hoja “Base Datos”.');return}
-  toast(`Importando ${fmt0(cargas.length)} despachos y ${fmt0(ings.length)} ingresos…`);
-  try{await upsert('combustible_ingresos',ings,'id_ingreso');await upsert('combustible',cargas,'id_carga')}
-  catch(e){toast(errMsg(e));await loadMod('combustible');return}
-  toast(`${fmt0(cargas.length)} despachos y ${fmt0(ings.length)} ingresos importados${issues.length?` · ${issues.length} avisos`:''}`);
-  await afterWrite(['combustible','mantenciones','base']);
+  const exC=cargas.filter(c=>cByRef.has(c.ref_externa)).length, exI=ings.filter(i=>iByRef.has(i.ref_externa)).length;
+  proponerImport('combustible',[cargas.length&&parte(cargas.length,'despachos',exC),ings.length&&parte(ings.length,'ingresos a estanques',exI)],
+    [{table:'combustible_ingresos',rows:ings,conflict:'id_ingreso'},{table:'combustible',rows:cargas,conflict:'id_carga'}],issues,exC+exI>0,
+    ()=>afterWrite(['combustible','mantenciones','base']));
 }
 /* Importación de la plantilla de maquinaria (equipos, documentos, operadores). */
 async function importXls(file){
@@ -2853,35 +3032,42 @@ async function importXls(file){
   });
   S.importKind='maquinaria';S.importIssues=issues;
   if(!ops.length&&!eqs.length&&!docs.length){render();toast('No encontré hojas Equipos, Documentos u Operadores con datos válidos.');return}
-  toast('Importando…');
-  try{
-    await upsert('operadores',ops,'id_operador');
-    await upsert('equipos',eqs,'id_maquina');
-    await upsert('documentos',docs,'id_maquina,documento');
-  }catch(err){toast(errMsg(err));await load();return}
-  toast(`${nE} equipos nuevos · ${uE} actualizados · ${docs.length} documentos · ${ops.length} operadores${issues.length?` · ${issues.length} filas omitidas`:''}`);
-  await load();
+  const exO=ops.filter(o=>S.ops.has(o.id_operador)).length, exD=docs.filter(d=>S.docs.has(d.id_maquina+'__'+DOC_K[d.documento])).length;
+  proponerImport('maquinaria',[ops.length&&parte(ops.length,'operadores',exO),eqs.length&&parte(eqs.length,'equipos',uE),docs.length&&parte(docs.length,'documentos',exD)],
+    [{table:'operadores',rows:ops,conflict:'id_operador'},{table:'equipos',rows:eqs,conflict:'id_maquina'},{table:'documentos',rows:docs,conflict:'id_maquina,documento'}],issues,exO+uE+exD>0,
+    ()=>load());
 }
 
 /* ---------- eventos ---------- */
 document.addEventListener('click',ev=>{
   const t=ev.target.closest('[data-mod],[data-tab],[data-tipo],[data-docf],[data-act],[data-open],[data-op],[data-rec],button[data-set]'); if(!t)return;
-  if(t.dataset.mod){S.mod=t.dataset.mod;S.open=null;S.rec=null;S.formErr='';render();return}
+  if(t.dataset.mod){ir(t.dataset.mod);return}
   if(t.dataset.set&&t.tagName==='BUTTON'){const [o,k]=t.dataset.set.split('.');S[o][k]=t.dataset.val;render();return}
   if(t.dataset.tab){S.tab=t.dataset.tab;S.formErr='';render();return}
   if(t.dataset.tipo){S.tipo=t.dataset.tipo;render();return}
   if(t.dataset.docf){S.docf=t.dataset.docf;render();return}
-  if(t.dataset.open){S.rec=null;S.open=t.dataset.open;S.formErr='';S.confirmDel=false;renderDrawer();return}
+  if(t.dataset.open){S.rec=null;S.open=t.dataset.open;S.openVer=S.eq.get(S.open)?.actualizado_en||null;S.formErr='';S.confirmDel=false;renderDrawer();return}
   if(t.dataset.rec){openRec(t.dataset.rec,t.dataset.key);return}
   if(t.dataset.op){S.opEdit=S.ops.get(t.dataset.op)||null;S.formErr='';render();return}
   const a=t.dataset.act;
-  if(a==='close'){if(S.saving)return;if(S.rec){closeRec();return}S.open=null;S.formErr='';S.confirmDel=false;renderDrawer()}
-  else if(a==='new'){S.open='__new';S.formErr='';renderDrawer()}
+  /* antes de volver a dibujar un formulario de registro se guarda lo escrito, para no perderlo */
+  const sync=()=>{if(S.rec&&document.getElementById('recform'))S.rec.data={...S.rec.data,...REC[S.rec.kind].read()}};
+  if(a==='close'){cerrarFicha()}
+  else if(a==='close-si'){cerrarFicha(true)}
+  else if(a==='close-no'){const c=$('#cerrar-conf');if(c)c.hidden=true}
+  else if(a==='new'){S.open='__new';S.openVer=null;S.formErr='';renderDrawer()}
   else if(a==='save'){ev.preventDefault();saveEquipo()}
   else if(a==='rec-new'){newRec(t.dataset.kind,{...(t.dataset.mtipo&&{tipo:t.dataset.mtipo}),...(t.dataset.silo&&{id_silo:t.dataset.silo})})}
   else if(a==='rec-save'){ev.preventDefault();saveRec()}
-  else if(a==='del'){S.confirmDel=true;renderDrawer()}
-  else if(a==='del-no'){S.confirmDel=false;renderDrawer()}
+  else if(a==='del'){sync();S.confirmDel=true;renderDrawer()}
+  else if(a==='del-no'){sync();S.confirmDel=false;renderDrawer()}
+  else if(a==='imp-ok'){ejecutarImport()}
+  else if(a==='imp-no'){S.imp=null;S.importIssues=[];render();toast('Importación cancelada: no se guardó nada.')}
+  else if(a==='ini-centro'){
+    /* el campo elegido en Inicio queda también como filtro de Leche, Rebaño y Equipos */
+    const c=t.dataset.val;S.ini.centro=c;pref.set('centro',c);S.lc.sala=c;S.rb.centro=c;S.centro=c;render();
+  }
+  else if(a==='ini-refrescar'){refrescarTodo()}
   else if(a==='del-yes'){deleteEquipo()}
   else if(a==='rec-del-yes'){deleteRec()}
   else if(a==='import'){S.importKind=t.dataset.kind;$('#xls').click()}
@@ -2917,11 +3103,12 @@ document.addEventListener('click',ev=>{
   }
 });
 document.addEventListener('keydown',ev=>{
-  if(ev.key==='Escape'&&(S.open||S.rec)&&!S.saving){if(S.rec)closeRec();else{S.open=null;S.confirmDel=false;renderDrawer()}return}
+  if(ev.key==='Escape'&&(S.open||S.rec)){cerrarFicha();return}
   if(ev.key==='Enter'){const r=ev.target.closest('tr[data-open],tr[data-op],tr[data-rec],.modcard');if(r){r.click()}}
 });
 document.addEventListener('change',ev=>{
   const el=ev.target;
+  if(el.closest&&el.closest('#recform,#eqform')) S.dirty=true;
   if(el.id==='f-centro'){S.centro=el.value;render();return}
   if(el.id==='xls'){const f=el.files[0];if(f){if(S.importKind==='maquinaria')importXls(f);else importReg(S.importKind,f)}el.value='';return}
   if(el.id==='imgs'){const fs=[...el.files];if(fs.length)subirImagenes(fs,S.imgFor);el.value='';return}
@@ -2943,6 +3130,7 @@ document.addEventListener('change',ev=>{
   }
 });
 document.addEventListener('input',ev=>{
+  if(ev.target.closest&&ev.target.closest('#recform,#eqform')) S.dirty=true;
   if(ev.target.id==='f-q'){S.q=ev.target.value;const pos=ev.target.selectionStart;renderEquipos([...S.eq.values()],false);const el=$('#f-q');el.focus();el.setSelectionRange(pos,pos)}
   else if(S.rec&&S.warnAck&&ev.target.closest('#recform')){S.warnAck=false}
 });
@@ -2964,10 +3152,35 @@ document.addEventListener('submit',async ev=>{
 });
 /* Al volver a la pestaña, trae los cambios que hayan hecho otras personas. */
 document.addEventListener('visibilitychange',()=>{
-  if(document.hidden||!S.user||S.open||S.rec) return;
+  if(document.hidden||!S.user||S.open||S.rec||S.imp) return;
   if(Date.now()-S.loadedAt>30000) load();
-  const m=S.mods[S.mod];if(m&&m.loaded&&Date.now()-(m.at||0)>30000) loadMod(S.mod);
+  /* Inicio muestra todos los módulos: se refrescan todos los que ya estén cargados */
+  for(const k of (S.mod==='inicio'?Object.keys(S.mods):[S.mod])){const m=S.mods[k];if(m&&m.loaded&&Date.now()-(m.at||0)>30000) loadMod(k)}
 });
+/* Botón "Actualizar" de Inicio: vuelve a pedir todo a la base. */
+async function refrescarTodo(){
+  if(S.refrescando) return;
+  S.refrescando=true;render();
+  await Promise.all([load(),...Object.keys(S.mods).filter(k=>S.mods[k].loaded||S.mods[k].err).map(k=>{S.mods[k].err='';return loadMod(k)})]);
+  S.refrescando=false;render();
+  toast(S.loadErr?'No se pudo actualizar. Revisa la conexión.':'Datos actualizados');
+}
+/* Cada módulo tiene su dirección (#leche, #combustible…): sirve el botón Atrás, recargar y guardar un acceso directo. */
+const MOD_IDS=MODS.filter(m=>m.id&&!m.href).map(m=>m.id);
+const modDeHash=()=>{const h=location.hash.slice(1);return MOD_IDS.includes(h)?h:'inicio'};
+function ir(mod){
+  if(!MOD_IDS.includes(mod)) return;
+  if(modDeHash()===mod){S.mod=mod;S.open=null;S.rec=null;S.formErr='';render();window.scrollTo(0,0);return}
+  location.hash=mod;
+}
+window.addEventListener('hashchange',()=>{
+  /* con una ficha abierta, Atrás cierra la ficha (o pregunta si hay cambios sin guardar) y no cambia de módulo */
+  if(S.open||S.rec){history.pushState(null,'','#'+S.mod);cerrarFicha();return}
+  S.mod=modDeHash();S.formErr='';
+  if(S.user){render();window.scrollTo(0,0)}
+});
+S.mod=modDeHash();
+{const c=pref.get('centro');if(c&&SALAS.includes(c)){S.ini.centro=c;S.lc.sala=c;S.rb.centro=c;S.centro=c}}
 
 if(!sb){
   document.body.innerHTML='<div class="ph" style="padding:0 16px"><h2>No se pudo cargar Torre de Control Agrícola</h2><p>Falta la conexión con el servidor. Revisa internet y recarga la página.</p></div>';
